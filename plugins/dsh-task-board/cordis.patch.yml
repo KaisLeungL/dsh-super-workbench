@@ -1,0 +1,17 @@
+# One install owns every task-board feature. Data and settings identities stay stable.
+- insert:
+    - id: ui-task-board
+      name: '@linxin666/dsh-client-ui-task-board'
+    - id: ui-task-board-inspection
+      name: '@linxin666/dsh-client-ui-task-board/inspection'
+      config:
+        enabled: true
+        rules: []
+    - id: ui-task-board-github
+      name: '@linxin666/dsh-client-ui-task-board/github'
+    - id: ui-task-board-team
+      name: '@linxin666/dsh-client-ui-task-board/team'
+    - id: task-board-remote
+      name: '@linxin666/dsh-client-ui-task-board/remote'
+    - id: task-forest
+      name: '@linxin666/dsh-client-ui-task-board/forest'

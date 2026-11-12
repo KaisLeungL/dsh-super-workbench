@@ -1,0 +1,162 @@
+{
+  "name": "@linxin666/dsh-client-ui-task-board",
+  "description": "Unified DSH task board with project inspection, task forests, GitHub sync, team collaboration, scheduling and remote board access.",
+  "version": "0.4.16",
+  "icon": "icon.svg",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/bundle.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./src/*": "./src/*",
+    "./locale/en.json": "./locale/en.json",
+    "./locale/zh.json": "./locale/zh.json",
+    "./package.json": "./package.json",
+    "./inspection": {
+      "types": "./lib/types/modules/inspection/index.d.ts",
+      "default": "./lib/modules/inspection/index.js"
+    },
+    "./github": {
+      "types": "./lib/types/modules/github/index.d.ts",
+      "default": "./lib/modules/github/index.js"
+    },
+    "./remote": {
+      "types": "./lib/types/modules/remote/index.d.ts",
+      "default": "./lib/modules/remote/index.js"
+    },
+    "./team": {
+      "types": "./lib/types/modules/team/index.d.ts",
+      "default": "./lib/modules/team/index.js"
+    },
+    "./forest": {
+      "default": "./lib/modules/forest/index.js"
+    },
+    "./inspection/locale/zh.json": "./locale/inspection/zh.json",
+    "./inspection/locale/en.json": "./locale/inspection/en.json",
+    "./inspection/icon": "./locale/inspection/icon.svg",
+    "./github/locale/zh.json": "./locale/github/zh.json",
+    "./github/locale/en.json": "./locale/github/en.json",
+    "./github/icon": "./locale/github/icon.svg",
+    "./remote/locale/zh.json": "./locale/remote/zh.json",
+    "./remote/locale/en.json": "./locale/remote/en.json",
+    "./remote/icon": "./locale/remote/icon.svg",
+    "./team/locale/zh.json": "./locale/team/zh.json",
+    "./team/locale/en.json": "./locale/team/en.json",
+    "./team/icon": "./locale/team/icon.svg",
+    "./forest/locale/zh.json": "./locale/forest/zh.json",
+    "./forest/locale/en.json": "./locale/forest/en.json",
+    "./forest/icon": "./locale/forest/icon.svg",
+    "./inspection/package.json": "./lib/modules/inspection/package.json",
+    "./github/package.json": "./lib/modules/github/package.json",
+    "./remote/package.json": "./lib/modules/remote/package.json",
+    "./team/package.json": "./lib/modules/team/package.json",
+    "./forest/package.json": "./lib/modules/forest/package.json"
+  },
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.2.2-rc.1"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-api-workspace-controller",
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json && tsdown",
+    "bundle": "tsdown",
+    "watch": "tsdown --watch",
+    "typecheck": "tsgo --noEmit",
+    "test": "vitest run && pnpm test:forest",
+    "test:watch": "vitest",
+    "test:forest": "node --test tests/modules/forest/*.test.js",
+    "test:package": "node --test tests/unified-package.test.js"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": ">=0.2.2-rc.1",
+    "react": "^18.2.0"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.19.0",
+    "marked": "^18.0.14",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/dsh-agent": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-agent-preset-registry": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-attachment": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-gateway": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-remotes": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-session-controller": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-workspace-controller": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-connection": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-locale": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-store": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-layout": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-settings": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-sidebar": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-workspace": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-commands": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-settings": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-system-prompt": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-workspace": "^0.2.2-rc.1",
+    "@types/node": "^22.20.0",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "^18.3.5",
+    "@vitest/coverage-v8": "^4.1.11",
+    "jsdom": "^25.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsdown": "0.22.2",
+    "typescript": "~5.7.2",
+    "vitest": "^4.1.11",
+    "@deepseek-ai/dsh-credentials": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage": "^0.2.2-rc.1"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/**/*.js.map",
+    "lib/**/*.d.ts",
+    "lib/**/*.d.ts.map",
+    "src",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale",
+    "lib/modules/*/package.json",
+    "README.md",
+    "README.zh.md",
+    "README.i18n.yaml",
+    "docs"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zhu1090093659/dsh-web.git"
+  }
+}

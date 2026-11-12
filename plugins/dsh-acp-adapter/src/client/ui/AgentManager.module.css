@@ -1,0 +1,104 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 760px;
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.header h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+}
+.header p {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+.workspace {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+.workspace select {
+  min-width: 0;
+  max-width: 240px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  padding: 8px 10px;
+  font: inherit;
+}
+.tabs {
+  display: flex;
+  gap: 22px;
+  margin-top: 2px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+.tabs button {
+  position: relative;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  padding: 7px 1px 9px;
+  font: inherit;
+  cursor: pointer;
+}
+.tabs button:hover,
+.tabs button[aria-current='page'] {
+  color: var(--dsw-alias-label-primary);
+}
+.tabs button[aria-current='page']::after {
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--dsw-alias-label-primary);
+  content: '';
+}
+.tabs button:focus-visible,
+.workspace select:focus-visible {
+  outline: 2px solid var(--dsw-alias-label-primary);
+  outline-offset: 2px;
+}
+.body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.overview {
+  height: 560px;
+  max-height: 65vh;
+  min-height: 280px;
+}
+.overview > div {
+  background: transparent;
+}
+.empty {
+  padding: 32px 0;
+  color: var(--dsw-alias-label-secondary);
+}
+@media (max-width: 700px) {
+  .workspace {
+    margin-left: 0;
+    width: 100%;
+  }
+  .workspace select {
+    flex: 1;
+  }
+}

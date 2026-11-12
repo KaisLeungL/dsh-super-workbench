@@ -1,0 +1,3263 @@
+/**
+ * Task-board styles. Scoped by the plugin's own data attributes so nothing
+ * leaks into the rest of the GUI; colors ride the dsh --dsw-* tokens so the
+ * board follows the active theme (light/dark and skins).
+ */
+
+/* --- native panel page ------------------------------------------------------- */
+
+/* The board is an official center-column panel: the layout mounts this element
+   as the selected keyed 'main' occupant, so the shell's own column already
+   owns position, sizing and the conversation underneath. Nothing here hides or
+   re-parents another plugin's surface — the previous DOM takeover (absolute
+   overlay over a hidden conversation subtree) is gone with it.
+
+   The container query context stays: the board's responsive rules measure the
+   PANEL rather than the viewport, so a narrow column or a resized window
+   narrows the board at the same threshold the shell uses for its columns. */
+[data-dsh-taskboard-view] {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  container-name: task-board-view;
+  container-type: inline-size;
+  background: var(--dsw-alias-bg-base);
+}
+
+.selectableCard { min-width: 0; }
+.batchSelect { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+.batchSelect span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batchAssignment { flex: 0 0 auto; max-height: 40vh; overflow: auto; padding: 12px 16px; border-bottom: 1px solid var(--dsw-alias-border-l2); }
+.batchPreview { margin: 8px 0; padding-left: 20px; }
+.batchPreview li { overflow-wrap: anywhere; }
+.batchPreview li span { display: block; }
+.planningQuickActions { display: flex; flex-wrap: wrap; gap: 6px; }
+.planningQuickActions button {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 5px;
+  padding: 5px 7px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.planningQuickActions button:disabled { opacity: 0.5; cursor: default; }
+.detailSection ul { overflow-wrap: anywhere; padding-left: 20px; }
+.projectBadge {
+  display: inline-flex;
+  position: relative;
+  z-index: 1;
+  align-items: center;
+  justify-self: start;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--dsw-alias-border-main);
+  border-radius: 5px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.projectBadge span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.projectBadge svg { flex: none; }
+.projectBadge:focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 2px; }
+
+/* --- board frame -------------------------------------------------------------- */
+
+/* Board geometry and motion tokens. Every single-line control on the board —
+   the header's buttons, its pickers, its search box, the form inputs — takes
+   its height, radius and spacing from this one place, so a control never
+   drifts off the header's shared track as its padding is tuned. Declared on
+   the board root, which also contains every overlay the board mounts. */
+.board {
+  --dsh-tb-control-h: 30px;
+  --dsh-tb-control-radius: 8px;
+  --dsh-tb-control-gap: 8px;
+  --dsh-tb-icon-size: 30px;
+  --dsh-tb-hit-size: 44px;
+  --dsh-tb-motion-enter: 160ms;
+  --dsh-tb-motion-close: 140ms;
+  --dsh-tb-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Card surface geometry. Every consumer below reads these in a grid or flex
+     track — the column rail, the card's stripe track, its content track and
+     each row's reserved slot height — so a card's alignment is a track
+     boundary rather than a per-element pixel nudge. Declared here because the
+     label filter row and the detail panel's label list are siblings of the
+     columns, not descendants of one. */
+  --dsh-tb-rail: 12px;
+  --dsh-tb-card-stripe: 3px;
+  --dsh-tb-card-inset: 8px;
+  --dsh-tb-card-row: 18px;
+  --dsh-tb-card-gap: 6px;
+
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 20px 24px 16px;
+  gap: 16px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-family);
+}
+
+.boardHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.boardHeader > .primaryButton {
+  height: 40px;
+  padding-inline: 18px;
+  font-size: 15px;
+}
+
+.boardToolbar,
+.boardFilters,
+.boardTools {
+  display: flex;
+  align-items: center;
+  gap: var(--dsh-tb-control-gap);
+  min-width: 0;
+}
+
+.boardToolbar {
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.boardFilters {
+  flex: 1 1 420px;
+}
+
+.boardFilters > .boardProject {
+  max-width: min(172px, 36%);
+}
+
+.boardTools {
+  flex-wrap: wrap;
+}
+
+.toolbarDisclosure {
+  position: relative;
+  flex: none;
+}
+
+.toolbarDisclosure > summary {
+  list-style: none;
+}
+
+.toolbarDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.toolbarDisclosure[open] > summary {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.toolbarDisclosure[open] .menuChevron {
+  transform: rotate(225deg);
+}
+
+.toolbarDisclosure[data-align-end] > .menuPanel {
+  left: auto;
+  right: 0;
+}
+
+.toolbarDisclosure .menuItem[aria-pressed='true'] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.boardHostMeta {
+  padding: 8px 10px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.boardTitle {
+  flex: 1;
+  margin: 0;
+  font-size: clamp(19px, 2.3cqw, 28px);
+  font-weight: 700;
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+}
+
+.searchField {
+  flex: 1 1 220px;
+  position: relative;
+  min-width: 108px;
+  max-width: 280px;
+}
+
+.searchField > svg {
+  position: absolute;
+  top: 50%;
+  left: 9px;
+  transform: translateY(-50%);
+  color: var(--dsw-alias-label-secondary);
+  pointer-events: none;
+}
+
+.search {
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--dsh-tb-control-h);
+  padding: 0 8px 0 30px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-specific-input-major);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsh-tb-control-radius);
+  outline: none;
+}
+
+.search::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* --- columns ------------------------------------------------------------------ */
+
+.columns {
+  --dsh-tb-column-gap: 12px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max(160px, calc((100% - 3 * var(--dsh-tb-column-gap)) / 4));
+  gap: var(--dsh-tb-column-gap);
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  padding-bottom: 6px;
+  scrollbar-color: var(--dsw-alias-border-l3) var(--dsw-alias-interactive-bg-hover);
+  scrollbar-width: thin;
+}
+
+.columns[data-archive] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.columns::-webkit-scrollbar {
+  height: 10px;
+}
+
+.columns::-webkit-scrollbar-track {
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-radius: 999px;
+}
+
+.columns::-webkit-scrollbar-thumb {
+  background: var(--dsw-alias-border-l3);
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+.columns::-webkit-scrollbar-thumb:hover {
+  background: var(--dsw-alias-border-l4);
+  background-clip: content-box;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 96%, var(--dsw-alias-label-primary));
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* The header's content box starts on the column rail, exactly where the first
+   card's left edge starts; the status dot is the header's own leading marker,
+   the counterpart of a card's outcome stripe. */
+.columnHeader {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px var(--dsh-tb-rail);
+  /* One height with and without the density switch (the archive column has
+     none), so moving between columns never shifts the cards below. */
+  min-height: calc(var(--dsh-tb-card-row) + 18px);
+  flex: none;
+}
+
+.columnTitle {
+  margin: 0;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dsw-alias-label-primary);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.columnCount {
+  flex: none;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: var(--dsh-tb-card-row);
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-radius: 999px;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.statusDot[data-status='backlog'] { background: var(--dsw-alias-label-tertiary); }
+.statusDot[data-status='todo'] { background: var(--dsw-alias-state-business-primary); }
+.statusDot[data-status='running'] { background: var(--dsw-alias-state-warn-primary); }
+.statusDot[data-status='needs_input'],
+.statusDot[data-status='review'] { background: var(--dsw-alias-state-warn-primary); }
+.statusDot[data-status='done'] { background: var(--dsw-alias-state-success-primary); }
+.statusDot[data-status='failed'] { background: var(--dsw-alias-state-error-primary); }
+
+/* The inset is the same rail the header uses, so a card's left edge lines up
+   under the header's content box in every column. */
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px var(--dsh-tb-rail) 10px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The empty state takes its inset from the column rail like everything else. */
+.columnEmpty {
+  padding: 16px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.column[data-status='running'] .columnEmpty {
+  border: 1px dashed var(--dsw-alias-border-l3);
+  border-radius: 8px;
+}
+
+/* --- cards -------------------------------------------------------------------- */
+
+/* The card is an article; the stretched .cardOpen button is its keyboard and
+   accessibility target. Content sits above the button (z-index 1) so the
+   badges keep their own tooltips, and the article's click handler opens the
+   detail for any click that is not a quick action.
+
+   The card is a two-track grid: the outcome stripe owns the first track and
+   every piece of content the second. One placement rule below puts all
+   children on the content track, so the title row, excerpt, meta line, labels
+   and quick actions share one rail instead of each one being nudged into
+   place. */
+.card {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--dsh-tb-card-stripe) minmax(0, 1fr);
+  column-gap: var(--dsh-tb-card-inset);
+  row-gap: var(--dsh-tb-card-gap);
+  align-content: start;
+  flex: none;
+  padding: 10px calc(var(--dsh-tb-card-stripe) + var(--dsh-tb-card-inset)) 10px 0;
+  text-align: left;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  overflow: hidden;
+  transition: box-shadow 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+/* One placement rule for every in-flow child: the card's content track. */
+.card > :not(.cardOpen) {
+  grid-column: 2;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* State stripe: the latest execution's outcome, readable while scanning a
+   column without reading the run count. It is the same token that declares the
+   card grid's first track, so the stripe and the content rail cannot drift.
+   No tone (never ran, archived) paints nothing. */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--dsh-tb-card-stripe);
+  background: transparent;
+  pointer-events: none;
+}
+
+.card[data-tone='running']::before { background: var(--dsw-alias-state-warn-primary); }
+.card[data-tone='succeeded']::before { background: var(--dsw-alias-state-success-primary); }
+.card[data-tone='failed']::before { background: var(--dsw-alias-state-error-primary); }
+.card[data-tone='cancelled']::before { background: var(--dsw-alias-label-tertiary); }
+
+.card:hover {
+  box-shadow: var(--dsw-shadow-lv2);
+  border-color: var(--dsw-alias-border-l3);
+  transform: translateY(-1px);
+}
+
+/* Dense columns scroll fast; a lift per hovered row reads as jitter. */
+.card[data-compact]:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+.card[data-status='running'] {
+  border-color: var(--dsw-alias-state-warn-primary);
+}
+
+.cardOpen {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.cardOpen:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+.cardTitleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Neutral filled slot on the meta tier: the type prefix is a label, not a
+   fourth type size, and its row-tall line box sits it on the title's first
+   line without a pixel offset. */
+.cardKind {
+  flex: none;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: var(--dsh-tb-card-row);
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.cardTitle {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.card[data-compact] {
+  row-gap: 2px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.card[data-compact] .cardTitle {
+  font-size: 12px;
+  font-weight: 500;
+  -webkit-line-clamp: 1;
+}
+
+/* Provider decorations share the tags row on full cards and meta on compact cards. */
+.cardDecoration {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.cardDecoration:empty {
+  display: none;
+}
+
+.cardExcerpt {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Ownership, time and chips wrap when their content needs another line. */
+.cardMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-height: var(--dsh-tb-card-row);
+  font-size: 12px;
+  line-height: var(--dsh-tb-card-row);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.cardTime {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Tabular figures keep a ticking stamp from re-measuring the row. */
+  font-variant-numeric: tabular-nums;
+}
+
+.cardTime > svg {
+  vertical-align: -2px;
+  margin-inline-end: 4px;
+}
+
+.cardMeta .projectBadge {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.cardMeta button.projectBadge:hover {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
+}
+
+.cardTime[data-target-time] {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.cardSchedule {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  min-width: 0;
+  height: var(--dsh-tb-card-row);
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* The run line: one filled result badge beside the run count, both inside the
+   same fixed slot, so a settled run never re-measures the row it sits on. */
+.cardRun {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: var(--dsh-tb-card-row);
+  font-size: 12px;
+  line-height: var(--dsh-tb-card-row);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.cardRun[data-declared] {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+/* Keep the result readable when a theme gives both state colors similar lightness. */
+.cardResult {
+  flex: none;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: var(--dsh-tb-card-row);
+  color: var(--dsw-alias-state-warn-primary);
+  background: var(--dsw-alias-state-warn-secondary);
+}
+
+.cardResult[data-result='succeeded'] {
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 16%, var(--dsw-alias-bg-base));
+}
+
+.cardResult[data-result='failed'] {
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 16%, var(--dsw-alias-bg-base));
+}
+
+.cardResult[data-result='cancelled'] {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* Keep a readable session-history action in both full and compact cards. */
+.cardSession {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  gap: 4px;
+  height: var(--dsh-tb-card-row);
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+/* Expand the history link's pointer target to the board's 44px minimum. */
+.cardAction {
+  position: relative;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cardAction::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--dsh-tb-hit-size);
+  min-width: 100%;
+  height: var(--dsh-tb-hit-size);
+  transform: translate(-50%, -50%);
+}
+
+.cardAction:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.cardAction:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+/* Recency groups inside a settled column. */
+.cardGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Group headers sit on the same rail as the cards they fold. */
+.cardGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 0;
+  min-height: var(--dsh-tb-card-row);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.cardGroupCount {
+  font-weight: 400;
+}
+
+.cardGroupHeader .linkButton {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+/* Provider-owned source groups wrap recency groups without adding a new
+   semantic part. Long owner/repository labels wrap instead of pushing the
+   count and disclosure beyond a narrow column. */
+.sourceGroup {
+  gap: 8px;
+}
+
+.sourceGroupHeader {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.sourceGroupLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Per-column density switch in the column header: one row slot, 44px pointer
+   target from the same expansion the card's quick action uses. */
+.densityToggle {
+  margin-inline-start: auto;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--dsh-tb-card-row);
+  height: var(--dsh-tb-card-row);
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.densityToggle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--dsh-tb-hit-size);
+  height: var(--dsh-tb-hit-size);
+  transform: translate(-50%, -50%);
+}
+
+.densityToggle:hover,
+.densityToggle[data-active='true'] {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.densityToggle:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+/* Narrow columns can wrap the history action beside the execution outcome. */
+.cardStatus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--dsh-tb-card-row);
+  font-size: 12px;
+  line-height: var(--dsh-tb-card-row);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.cardStatusText {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.cardRuns {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cardRunningLabel {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.cardSpinnerSlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--dsh-tb-card-row);
+  height: var(--dsh-tb-card-row);
+}
+
+.cardSpinner {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid var(--dsw-alias-state-warn-primary);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: dshTbSpin 800ms linear infinite;
+}
+
+@keyframes dshTbSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- buttons ------------------------------------------------------------------ */
+
+/* One geometry, three roles. Every filled, outlined and icon control on the
+   board takes its height, radius and inner alignment from the board tokens, so
+   the header's buttons, the detail footer's actions and every modal footer sit
+   on one track, and a state change (selected, disabled, pending) can never
+   resize the control. Filled actions use the matched primary-action set
+   (button-primary-fill / button-primary-hover / label-primary-foreground) and
+   never a cross-family pair. */
+.primaryButton,
+.ghostButton,
+.dangerButton,
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: var(--dsh-tb-control-h);
+  border-radius: var(--dsh-tb-control-radius);
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.primaryButton,
+.dangerButton {
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.primaryButton {
+  color: var(--dsw-alias-label-primary-foreground);
+  background: var(--dsw-alias-button-primary-fill);
+  border: 1px solid transparent;
+}
+
+.dangerButton {
+  color: var(--dsw-alias-label-primary-foreground);
+  background: var(--dsw-alias-state-error-primary);
+  border: 1px solid transparent;
+}
+
+.ghostButton {
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  border: 1px solid var(--dsw-alias-border-l2);
+}
+
+/* Selected view toggle. The outlined control keeps its box and only changes
+   role colour, so pressing a toggle cannot move the toolbar around it. */
+.ghostButton[data-active='true'] {
+  color: var(--dsw-alias-label-primary-foreground);
+  background: var(--dsw-alias-button-primary-fill);
+  border-color: transparent;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--dsw-alias-button-primary-hover);
+}
+
+.ghostButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.ghostButton[data-active='true']:hover:not(:disabled) {
+  background: var(--dsw-alias-button-primary-hover);
+}
+
+.dangerButton:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.dangerButton:active:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+.primaryButton:disabled,
+.dangerButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ghostButton:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Icon-only control: a 30px box on the control track whose pointer target is
+   expanded to the 44px minimum without changing what the eye sees. */
+.iconButton {
+  position: relative;
+  width: var(--dsh-tb-icon-size);
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.iconButton::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--dsh-tb-hit-size);
+  height: var(--dsh-tb-hit-size);
+  transform: translate(-50%, -50%);
+}
+
+.iconButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.iconButton:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.linkButton {
+  padding: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-state-business-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+/* --- modals ------------------------------------------------------------------- */
+
+/* Enter and exit are one motion pair: the backdrop fades while the surface
+   rises from exactly the origin it returns to (8px down, 98% scale, centred).
+   `usePresence` keeps the node mounted through the exit leg and paints
+   `data-state="closing"`, so the reverse leg always runs instead of the node
+   vanishing; both legs keep the surface's dimensions, so nothing behind the
+   overlay reflows. */
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--dsw-alias-bg-mask-1);
+  animation: dshTbBackdropIn var(--dsh-tb-motion-enter) var(--dsh-tb-ease) both;
+}
+
+.modalBackdrop[data-state='closing'] {
+  animation: dshTbBackdropOut var(--dsh-tb-motion-close) var(--dsh-tb-ease) both;
+}
+
+.modal,
+.detail {
+  animation: dshTbSurfaceIn var(--dsh-tb-motion-enter) var(--dsh-tb-ease) both;
+}
+
+.modalBackdrop[data-state='closing'] .modal,
+.modalBackdrop[data-state='closing'] .detail {
+  animation: dshTbSurfaceOut var(--dsh-tb-motion-close) var(--dsh-tb-ease) both;
+}
+
+@keyframes dshTbBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dshTbBackdropOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes dshTbSurfaceIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes dshTbSurfaceOut {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(520px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  overflow: hidden;
+  padding: 18px;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  box-shadow: var(--dsw-shadow-lv3);
+  color: var(--dsw-alias-label-primary);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.confirmMessage {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Label manager (label cleanup): a titled overlay with one row per label in
+   use, each carrying its usage count and the two ledger-wide transitions. */
+.modalHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modalHeader > .modalTitle {
+  flex: 1;
+  min-width: 0;
+  /* A header can now carry a fixed-width control cluster (the label manager's
+     clear rule), so the title has to shrink honestly instead of overflowing onto
+     it — the longer localised titles are where this shows. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tagManageList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tagManageRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsh-tb-control-radius);
+}
+
+.tagManageName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.tagManageCount {
+  flex: none;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tagManageInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tagManageMerge {
+  flex: 1 0 100%;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* --- label cleanup (bulk clear) ----------------------------------------------
+ * Clearing acts on the whole ledger, not on the row above it, so the control sits
+ * in the card's corner beside the title instead of trailing the list. Only the
+ * cluster, the `?` and the field's width are new — the threshold field reuses the
+ * labeled field contract the schedule rows carry (.scheduleZone is already a label
+ * wrapping its text and its control) and both buttons reuse .ghostButton and
+ * .helpButton, so the corner never grows a second control style. The rule itself
+ * is not painted in the body: the `?` carries it as a bubble anchored under the
+ * button, which keeps it inside the modal box this stylesheet clips at .modal, and
+ * the same element is the button's aria-describedby target — one copy, shown on
+ * pointer hover and on keyboard focus alike. The notice
+ * stays plain supporting text in the body, not the error slot: "nothing matched"
+ * is an answer, not a failure.
+ * ----------------------------------------------------------------------------- */
+
+.tagCleanup {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: var(--dsh-tb-control-gap);
+}
+
+.tagCleanup .ghostButton {
+  flex: none;
+}
+
+/* The rule's carrier: a round `?` sized to the control rail, so it aligns with the
+   threshold field and the commit beside it. */
+.helpButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex: none;
+  width: var(--dsh-tb-control-h);
+  height: var(--dsh-tb-control-h);
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 50%;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: help;
+}
+
+.helpButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* Anchor for the bubble: the header's flex row sizes it like the button alone. */
+.helpTipWrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+/* The rule itself, anchored under the `?` so it stays inside the modal box that
+   .modal clips. pre-line keeps the two sentences in their own paragraphs, and the
+   element doubles as the button's description. */
+.helpTip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 4;
+  box-sizing: border-box;
+  width: max-content;
+  /* Anchored to the left edge of the `?` and opening rightwards: the `?` sits just
+     left of the clear control, so a right-anchored bubble would run past the modal's
+     left edge and be clipped by .modal's own overflow. 240px leaves room for the
+     narrowest shipped locale's control cluster while still staying inside the card. */
+  max-width: 240px;
+  padding: 10px 12px;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  box-shadow: var(--dsw-shadow-lv3);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-line;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+.helpTipWrap:hover .helpTip,
+.helpTipWrap:focus-within .helpTip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.tagCleanupInput {
+  flex: none;
+  width: 64px;
+}
+
+.tagCleanupNotice {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* --- form sections (create/edit dialog) --------------------------------------
+ * The task form groups its configuration into collapsible regions so the
+ * dialog fits without a scrollbar: only the content region starts open, and
+ * every collapsed header carries a one-line summary of what it holds. The
+ * body keeps an overflow fallback for tiny viewports. The chevron is drawn
+ * with borders (no glyph), so no font or emoji can change it.
+ *
+ * The region is the SAME disclosure contract the card panel's folds use: the
+ * same markup (data-open, aria-expanded/aria-controls, one summary track), a
+ * 12px header row, a label that shrinks and ellipsizes before the summary
+ * does, a summary held on the one right-hand track by its auto margin, and a
+ * 44px pointer target expanded past the row. Only the spacing rhythm around
+ * the regions is the dialog's own, at the dialog's control geometry.
+ * ----------------------------------------------------------------------------- */
+
+.modalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Every direct child keeps its natural height: a column flex item shrinks by
+   default, and a shrunk region would clip its own fields behind its
+   `overflow: hidden` instead of letting the body scroll. */
+.modalBody > * {
+  flex: none;
+}
+
+/* A row is shorter than its 44px target, so the section stops clipping and the
+   header carries the section's inner radius itself — which is what
+   `overflow: hidden` used to do. */
+.formSection {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--dsw-alias-separator-primary);
+  border-radius: 10px;
+  overflow: visible;
+}
+
+/* 28px row on the dialog's 30px control height (plus the section border). */
+.formSectionHeader {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.formSectionHeader:hover {
+  background: var(--dsw-alias-bg-mask-1);
+}
+
+.formSection[data-open='true'] .formSectionHeader {
+  border-radius: 9px 9px 0 0;
+}
+
+/* Pointer target: the board's 44px minimum, expanded past the row exactly like
+   the panel's fold row and the board's card actions. */
+.formSectionHeader::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--dsh-tb-hit-size);
+  height: var(--dsh-tb-hit-size);
+  transform: translate(-50%, -50%);
+}
+
+.formSectionChevron {
+  flex: none;
+  width: 0;
+  height: 0;
+  margin-left: 1px;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--dsw-alias-label-tertiary);
+  transition: transform 120ms ease;
+}
+
+.formSection[data-open='true'] .formSectionChevron {
+  transform: rotate(90deg);
+}
+
+/* Title and summary both shrink, so a long summary never takes the row: the
+   label keeps its own width and the line that gives way is the one that
+   ellipsizes. The summary's auto margin is what puts every region's summary on
+   the dialog's one right-hand track. */
+.formSectionTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formSectionSummary {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formSectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--dsw-alias-separator-primary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Single-line fields (and the multi-line ones, which only grow past the
+   minimum) share the control height, the control radius and the control
+   border, so an input never sits taller than the button beside it. */
+.input {
+  box-sizing: border-box;
+  min-height: var(--dsh-tb-control-h);
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-specific-input-major);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsh-tb-control-radius);
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.input:focus {
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.select {
+  box-sizing: border-box;
+  height: var(--dsh-tb-control-h);
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-specific-input-major);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsh-tb-control-radius);
+  outline: none;
+  font-family: inherit;
+  max-width: 100%;
+}
+
+.input::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.formError {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* --- detail -------------------------------------------------------------------
+ * A fixed shell frames a reading pane and a settings pane. On narrow
+ * screens, the two panes share the body scroll beneath the header.
+ *
+ * The view's whole type scale is three steps: 20 title, 13 body, 12 meta.
+ * Hierarchy inside that scale comes from weight and the label colour role,
+ * never from a fourth size.
+ * --------------------------------------------------------------------------- */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(1072px, calc(100vw - 48px));
+  height: calc(100vh - 64px);
+  height: calc(100dvh - 64px);
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  box-shadow: var(--dsw-shadow-lv3);
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+}
+
+.detailHeader {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  flex: none;
+}
+
+.detailIdentity {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.detailHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.detailTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+  min-width: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.statusBadge {
+  flex: none;
+  padding: 2px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.statusBadge[data-status='running'] {
+  color: var(--dsw-alias-state-warn-primary);
+  border-color: var(--dsw-alias-state-warn-primary);
+}
+
+.statusBadge[data-status='done'] {
+  color: var(--dsw-alias-state-success-primary);
+  border-color: var(--dsw-alias-state-success-primary);
+}
+
+.statusBadge[data-status='failed'] {
+  color: var(--dsw-alias-state-error-primary);
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.detailBody {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.detailBody > .formError {
+  flex: none;
+  margin: 12px 24px;
+}
+
+.detailColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+}
+
+.detailRead {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.detailTabs {
+  display: flex;
+  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  gap: 24px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+}
+
+.detailTab {
+  padding: 0;
+  min-height: 44px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.detailTab[aria-selected='true'] {
+  border-bottom-color: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.detailTab:focus-visible,
+.detailTabPanel:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+.detailTabPanel,
+.detailSettings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px 24px 24px;
+}
+
+.detailTabPanel[hidden] {
+  display: none;
+}
+
+.detailTabPanel > *,
+.detailSettings > * {
+  flex: none;
+}
+
+.detailSettings {
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 42%, var(--dsw-alias-bg-base));
+}
+
+.detailSettings h3,
+.detailEmpty h4 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.detailWorkspace {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.detailWorkspace dd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}
+
+.detailWorkspace button {
+  flex: none;
+}
+
+.detailFolds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detailPrompt {
+  padding: 16px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 55%, var(--dsw-alias-bg-base));
+}
+
+.detailEmpty {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  min-height: 180px;
+  text-align: center;
+}
+
+.detailEmpty p,
+.detailTabPanel > .detailMeta,
+.detailSettings > .detailMeta {
+  margin: 0;
+}
+
+.timelineDay {
+  display: grid;
+  gap: 8px;
+}
+
+.businessTimeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+.businessTimeline li {
+  display: grid;
+  grid-template-columns: minmax(0, 90px) minmax(0, 1fr) minmax(0, 27%);
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  font-size: 13px;
+}
+
+.businessTimeline time {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.businessTimeline p {
+  margin: 4px 0 0;
+}
+
+@media (min-width: 769px) and (min-height: 601px) {
+  .detailBody {
+    overflow: clip;
+  }
+
+  .detailColumns {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 306px);
+  }
+
+  .detailRead {
+    min-height: 0;
+  }
+
+  .detailTabs {
+    position: static;
+  }
+
+  .detailTabPanel,
+  .detailSettings {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .detailTabPanel {
+    flex: 1;
+  }
+
+  .detailSettings {
+    border-top: 0;
+    border-left: 1px solid var(--dsw-alias-border-l2);
+  }
+}
+
+.detailSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detailSection h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.detailText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The view's controls are shared with the board's form dialogs, where this
+   scale does not apply; inside the panel they read as body copy or as meta so
+   the three-step budget holds. */
+.detailBody .scheduleInput,
+.detailBody .schedulePreset,
+.detailBody .promptBlock {
+  font-size: 13px;
+}
+
+.detailBody .scheduleZone,
+.detailBody .scheduleMeta,
+.detailBody .cardTag {
+  font-size: 12px;
+}
+
+/* --- scheduled runs ---------------------------------------------------------- */
+
+.scheduleToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.scheduleToggle input {
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.scheduleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scheduleInput {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--dsw-font-markdown-code-block-small);
+}
+
+.scheduleInputInvalid {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.scheduleInputInvalid:focus {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.schedulePreset {
+  flex: none;
+  box-sizing: border-box;
+  height: var(--dsh-tb-control-h);
+  padding: 0 8px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-specific-input-major);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsh-tb-control-radius);
+  outline: none;
+}
+
+/* Zone row: the label and the picker share the cron row's geometry so the two
+   controls read as one editor. */
+.scheduleZone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.scheduleZone select {
+  flex: 1;
+  min-width: 0;
+}
+
+.scheduleMeta {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
+.promptBlock {
+  margin: 0;
+  padding: 10px 12px;
+  line-height: 1.5;
+  font-family: var(--dsw-font-markdown-code-block-small);
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-markdown-code-block);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* --- execution history -------------------------------------------------------
+ * One row per run, two lines each: identity on the head line (status, start and
+ * end in one absolute format, the session jump) and the evidence the run
+ * produced underneath. The newest five rows are always visible; the rest sit
+ * behind one disclosure whose open and close legs are the same motion reversed
+ * (see `dshTbRowsIn` / `dshTbRowsOut`).
+ * --------------------------------------------------------------------------- */
+
+.executionLog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.executionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.executionExtra {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.executionRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.executionRowHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.executionRowEvidence {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* One filled slot per outcome: the secondary state surface carries the state
+   colour as text, so running, succeeded, failed and cancelled read with the
+   same weight instead of mixing a filled and an unfilled badge. */
+.executionBadge {
+  flex: none;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  border-radius: 999px;
+  color: var(--dsw-alias-state-warn-primary);
+  background: var(--dsw-alias-state-warn-secondary);
+}
+
+.executionBadge[data-result='succeeded'] {
+  color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-secondary);
+}
+
+.executionBadge[data-result='failed'] {
+  color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-state-error-secondary);
+}
+
+.executionBadge[data-result='cancelled'] {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.executionTimes {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
+.executionError {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-state-error-primary);
+  overflow-wrap: anywhere;
+}
+
+/* The session jump rides the row's head line, pushed to its trailing edge; its
+   pointer target is grown to the 44px minimum without moving the glyph. */
+.executionSession {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 0 2px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--dsw-alias-state-business-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.executionSession::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: var(--dsh-tb-hit-size);
+  transform: translate(-50%, -50%);
+}
+
+.executionSession:hover {
+  text-decoration: underline;
+}
+
+.executionDisclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+}
+
+/* One disclosure chevron for every folded region of the panel: drawn from
+   borders so it never depends on a glyph font, and it turns by the same 120ms
+   motion the rest of the board uses. */
+.disclosureChevron {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 120ms var(--dsh-tb-ease);
+}
+
+.disclosureChevron[data-open='true'] {
+  transform: rotate(225deg);
+}
+
+/* --- acceptance report -------------------------------------------------------
+ * The row carries the verdict only. Everything the board decided on stays one
+ * press away inside the fold: counts, judge route, per-criterion scores, the
+ * findings, the evidence scope and the usage are all rendered there, unchanged.
+ * --------------------------------------------------------------------------- */
+
+.verifyReport {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.verifyBadge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 2px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.verifyBadge::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: var(--dsh-tb-hit-size);
+  transform: translateY(-50%);
+}
+
+.verifyBadge[data-tone='warn'] {
+  color: var(--dsw-alias-state-warn-primary);
+  background: var(--dsw-alias-state-warn-secondary);
+  border-color: transparent;
+}
+
+.verifyBadge[data-tone='success'] {
+  color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-secondary);
+  border-color: transparent;
+}
+
+.verifyBadge[data-tone='error'] {
+  color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-state-error-secondary);
+  border-color: transparent;
+}
+
+.verifyVerdict {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.verifyPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.attemptRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.attemptHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* --- free-text references (handover bundle) --------------------------------- */
+
+.referenceList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.referenceRow {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* --- compact action menu (status moves, secondary card actions) ---------------
+ * One trigger on the control track, the choices only while it is open. Escape
+ * and an outside press close it and focus returns to the trigger; the panel
+ * paints above the scrolling body, so the menu never clips against it.
+ * --------------------------------------------------------------------------- */
+
+.menuRoot {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.menuChevron {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 120ms var(--dsh-tb-ease);
+}
+
+.menuChevron[data-open='true'] {
+  margin-top: 0;
+  transform: rotate(225deg);
+}
+
+.menuPanel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+/* The header's menu hangs from the panel's trailing edge instead. */
+.detailHeader .menuPanel {
+  left: auto;
+  right: 0;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  min-height: var(--dsh-tb-hit-size);
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.menuItem:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.menuItem[data-danger='true'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.menuItem:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* --- detail footer -------------------------------------------------------- */
+
+.detailFooter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  flex: none;
+}
+
+.detailMeta {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.detailFooter > .detailMeta {
+  margin-left: 0;
+}
+
+.detailStamp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+}
+
+.detailStamp svg {
+  flex: none;
+}
+
+/* --- disclosure motion -------------------------------------------------------
+ * The folded regions of the panel (the rest of the history, the acceptance
+ * detail) appear and leave as one reversed pair: the same 6px travel on the
+ * same curve, only opposite in direction. `usePresence` keeps the node mounted
+ * through the exit leg, so the close never snaps.
+ * --------------------------------------------------------------------------- */
+
+.executionExtra,
+.verifyPanel,
+.detailBody .formSectionBody {
+  animation: dshTbRowsIn var(--dsh-tb-motion-enter) var(--dsh-tb-ease) both;
+}
+
+.executionExtra[data-execution-fold='closing'],
+.verifyPanel[data-state='closing'],
+.detailBody .formSectionBody[data-state='closing'] {
+  animation: dshTbRowsOut var(--dsh-tb-motion-close) var(--dsh-tb-ease) both;
+}
+
+/* The task dialogs' regions are the same fold body under another name, so they
+   ride the same pair rather than a third disclosure style: one keyframe pair,
+   one 6px travel, the panel's two duration tokens. `usePresence` in
+   `CollapsibleSection` keeps the body mounted through the exit leg. */
+.formSectionBody {
+  animation: dshTbRowsIn var(--dsh-tb-motion-enter) var(--dsh-tb-ease) both;
+}
+
+.formSectionBody[data-state='closing'] {
+  animation: dshTbRowsOut var(--dsh-tb-motion-close) var(--dsh-tb-ease) both;
+}
+
+@keyframes dshTbRowsIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes dshTbRowsOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-6px); }
+}
+
+@keyframes dshTbFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dshTbFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Reduced motion: the same folds keep their short fade and drop only the
+   spatial travel. Both legs stay the reversed pair and `usePresence` still
+   unmounts on the close duration. */
+@media (prefers-reduced-motion: reduce) {
+  .executionExtra,
+  .verifyPanel,
+  .detailBody .formSectionBody {
+    animation: dshTbFadeIn var(--dsh-tb-motion-close) linear both;
+  }
+
+  .executionExtra[data-execution-fold='closing'],
+  .verifyPanel[data-state='closing'],
+  .detailBody .formSectionBody[data-state='closing'] {
+    animation: dshTbFadeOut var(--dsh-tb-motion-close) linear both;
+  }
+
+  .formSectionBody {
+    animation: dshTbFadeIn var(--dsh-tb-motion-close) linear both;
+  }
+
+  .formSectionBody[data-state='closing'] {
+    animation: dshTbFadeOut var(--dsh-tb-motion-close) linear both;
+  }
+}
+
+/* --- folded regions of the panel ---------------------------------------------
+ * The panel folds reuse the task form's own region contract (`.formSection`);
+ * only the sizes and the spacing rhythm are the panel's, so the form dialogs
+ * keep their own scale. Nothing here is a second disclosure style.
+ * --------------------------------------------------------------------------- */
+
+/* A fold row is 30px tall and its pointer target is still the board's 44px
+   minimum, expanded past the row exactly like `.cardAction`. A target that
+   overflows the row cannot live inside a clipping section, so the section stops
+   clipping and the header carries the section's inner radius itself — which is
+   what `overflow: hidden` used to do. */
+.detailBody .formSection {
+  min-width: 0;
+  overflow: visible;
+}
+
+.detailTabPanel > .formSection,
+.detailSettings .detailFolds > .formSection {
+  border: 0;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 0;
+}
+
+.detailBody .formSectionHeader {
+  position: relative;
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 16px;
+  border-radius: 9px;
+}
+
+.detailBody .formSection[data-open='true'] .formSectionHeader {
+  border-radius: 9px 9px 0 0;
+}
+
+.detailBody .formSectionHeader::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--dsh-tb-hit-size);
+  height: var(--dsh-tb-hit-size);
+  transform: translate(-50%, -50%);
+}
+
+/* Title and summary both shrink, so a long summary never takes the row: the
+   label keeps its own width and the line that gives way is the one that
+   ellipsizes. The summary's auto margin is what puts every fold's summary on
+   the panel's one right-hand track, two glyphs or clipped alike. */
+.detailBody .formSectionTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailBody .formSectionSummary {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.detailBody .formSectionBody {
+  gap: 8px;
+}
+
+/* --- constrained board containers ------------------------------------------ */
+
+@container task-board-view (max-width: 768px) {
+  .board {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .boardFilters { flex-wrap: wrap; }
+}
+
+@container task-board-view (max-width: 700px) {
+  .columns {
+    grid-auto-columns: 86cqw;
+    gap: 10px;
+    padding-inline: 2px 14cqw;
+    scroll-padding-inline: 2px;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .columns::-webkit-scrollbar {
+    display: none;
+  }
+
+  .column {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+
+  .columns[data-archive] {
+    padding-inline: 2px;
+  }
+}
+
+@container task-board-view (max-width: 600px) {
+  .board {
+    padding-inline: 8px;
+  }
+
+  .boardFilters { flex-basis: 100%; }
+  .searchField { flex: 1 0 100%; max-width: none; }
+}
+
+@container task-board-view (max-width: 400px) {
+  .boardTools { position: relative; }
+  .boardTools .toolbarDisclosure[data-align-end] { position: static; }
+}
+
+/* Viewport-specific mobile treatment: overlays occupy the dynamic viewport,
+   preserve notches/home indicators, and keep their action rows reachable. */
+@media (max-width: 768px) {
+  [data-dsh-taskboard-view] {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .card,
+  .primaryButton,
+  .ghostButton,
+  .dangerButton,
+  .iconButton,
+  .linkButton,
+  .search,
+  .input,
+  .select,
+  .schedulePreset,
+  .scheduleToggle {
+    min-height: 44px;
+  }
+
+  .search,
+  .input,
+  .select,
+  .schedulePreset {
+    box-sizing: border-box;
+    font-size: 16px;
+  }
+
+  .modalBackdrop {
+    align-items: stretch;
+    justify-content: stretch;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .modal,
+  .detail {
+    box-sizing: border-box;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .modal {
+    padding-top: max(16px, env(safe-area-inset-top));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+  }
+
+  .modalFooter {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    flex-wrap: wrap;
+    padding-top: 8px;
+    background: var(--dsw-alias-bg-base);
+  }
+
+  .modalFooter > button {
+    flex: 1 1 120px;
+  }
+
+  .detailHeader {
+    flex-wrap: wrap;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-left: max(16px, env(safe-area-inset-left));
+  }
+
+  .detailIdentity {
+    flex-basis: 100%;
+  }
+
+  .detailHeaderActions {
+    justify-content: flex-end;
+    margin-left: auto;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .detailTabs {
+    gap: 16px;
+  }
+
+  .detailTabs,
+  .detailTabPanel,
+  .detailSettings {
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-left: max(16px, env(safe-area-inset-left));
+  }
+
+  .businessTimeline li {
+    grid-template-columns: minmax(0, 75px) minmax(0, 1fr);
+  }
+
+  .businessTimeline li > .detailMeta {
+    grid-column: 2;
+  }
+
+  .detailFooter {
+    flex-wrap: wrap;
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+  }
+
+  .menuPanel {
+    min-width: 200px;
+  }
+
+  .detailFooter > button {
+    flex: 1 1 96px;
+  }
+
+  .detailFooter > .detailMeta {
+    flex: 1 0 100%;
+  }
+
+  .scheduleRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .schedulePreset {
+    width: 100%;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * Polish pass: complete interaction states (hover / active / focus-visible /
+ * disabled), unified 120ms motion, and reduced-motion fallback.
+ * Colors use the --dsw-alias-* design tokens, which adapt to light/dark/skins
+ * automatically, so every rule below is dark-safe by construction.
+ * --------------------------------------------------------------------------- */
+
+/* --- one themed focus-visible ring (approx 2px, 2px offset) --- */
+.primaryButton:focus-visible,
+.ghostButton:focus-visible,
+.dangerButton:focus-visible,
+.iconButton:focus-visible,
+.linkButton:focus-visible,
+.menuItem:focus-visible,
+.verifyBadge:focus-visible,
+.executionSession:focus-visible,
+.search:focus-visible,
+.input:focus-visible,
+.select:focus-visible,
+.schedulePreset:focus-visible,
+.scheduleToggle input:focus-visible,
+.formSectionHeader:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+/* --- unified 120ms motion across the board's interactive controls --- */
+.primaryButton,
+.ghostButton,
+.dangerButton,
+.iconButton,
+.linkButton,
+.menuItem,
+.verifyBadge,
+.executionSession,
+.search,
+.input,
+.select,
+.schedulePreset,
+.scheduleToggle input,
+.formSectionHeader,
+.formSectionChevron {
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, outline-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+/* --- press (active) feedback --- */
+.card:active {
+  box-shadow: var(--dsw-shadow-lv1);
+  transform: translateY(0);
+}
+
+.primaryButton:active:not(:disabled),
+.ghostButton:active:not(:disabled),
+.dangerButton:active:not(:disabled),
+.iconButton:active:not(:disabled),
+.linkButton:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* --- guarded hover for the remaining icon/link buttons (defensive: never
+       disabled today, but a disabled element must not react to hover) --- */
+.iconButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.linkButton:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.iconButton:disabled,
+.linkButton:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* --- search box focus (border tint + themed ring above) --- */
+.search:focus,
+.select:focus,
+.schedulePreset:focus {
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+/* --- schedule toggle checkbox focus already covered by the shared ring;
+       keep the accent-color and size stable --- */
+.scheduleToggle input {
+  margin: 0;
+}
+
+/* --- reduced motion: strip transitions, stop the decorative spinner --- */
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .primaryButton,
+  .ghostButton,
+  .dangerButton,
+  .iconButton,
+  .linkButton,
+  .menuItem,
+  .verifyBadge,
+  .executionSession,
+  .disclosureChevron,
+  .menuChevron,
+  .search,
+  .input,
+  .select,
+  .schedulePreset,
+  .scheduleToggle input,
+  .formSectionHeader,
+  .formSectionChevron {
+    transition: none;
+  }
+
+  .cardSpinner {
+    animation: none;
+  }
+
+  /* Overlay lifecycle without spatial travel: the backdrop and the surface keep
+     a short reversible fade, so entering and leaving stay perceptible and the
+     surface still spends the same time on screen before `usePresence`
+     unmounts it. */
+  .modalBackdrop,
+  .modal,
+  .detail {
+    animation: dshTbBackdropIn var(--dsh-tb-motion-close) linear both;
+  }
+
+  .modalBackdrop[data-state='closing'],
+  .modalBackdrop[data-state='closing'] .modal,
+  .modalBackdrop[data-state='closing'] .detail {
+    animation: dshTbBackdropOut var(--dsh-tb-motion-close) linear both;
+  }
+
+}
+
+/* --- task tags (issue #1521) ---------------------------------------------------
+ * A badge takes its tone from a fixed six-colour palette chosen by hashing the
+ * name, so one label always paints the same way and nothing per-tag has to be
+ * stored. The fill is translucent and the text keeps the theme's own primary
+ * label colour, so badges stay readable on light, dark, and every skin without
+ * depending on a token a skin may not define.
+ * ----------------------------------------------------------------------------- */
+
+.cardTags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* An empty label list paints no row at all instead of a gap-sized sliver. */
+.cardTags:not(:has(> .cardTag, > .cardDecoration:not(:empty))) {
+  display: none;
+}
+
+.cardTag {
+  max-width: 100%;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--dsh-task-tag-border);
+  border-radius: 999px;
+  background: var(--dsh-task-tag-fill);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tagFilter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 6px;
+  width: min(260px, 54cqw);
+  max-height: min(44vh, 280px);
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.tagChip {
+  min-height: 24px;
+  padding: 1px 9px;
+  border: 1px solid var(--dsh-task-tag-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: var(--dsh-tb-card-row);
+}
+
+.tagChip:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.tagChip[data-active='true'] {
+  background: var(--dsh-task-tag-fill);
+  color: var(--dsw-alias-label-primary);
+}
+
+.cardTag[data-tag-tone='0'],
+.tagChip[data-tag-tone='0'] {
+  --dsh-task-tag-fill: #4e93e82e;
+  --dsh-task-tag-border: #4e93e866;
+}
+
+.cardTag[data-tag-tone='1'],
+.tagChip[data-tag-tone='1'] {
+  --dsh-task-tag-fill: #2ea36a2e;
+  --dsh-task-tag-border: #2ea36a66;
+}
+
+.cardTag[data-tag-tone='2'],
+.tagChip[data-tag-tone='2'] {
+  --dsh-task-tag-fill: #d08a2a2e;
+  --dsh-task-tag-border: #d08a2a66;
+}
+
+.cardTag[data-tag-tone='3'],
+.tagChip[data-tag-tone='3'] {
+  --dsh-task-tag-fill: #b456c82e;
+  --dsh-task-tag-border: #b456c866;
+}
+
+.cardTag[data-tag-tone='4'],
+.tagChip[data-tag-tone='4'] {
+  --dsh-task-tag-fill: #cf5f7a2e;
+  --dsh-task-tag-border: #cf5f7a66;
+}
+
+.cardTag[data-tag-tone='5'],
+.tagChip[data-tag-tone='5'] {
+  --dsh-task-tag-fill: #4a9fb52e;
+  --dsh-task-tag-border: #4a9fb566;
+}
+
+.fieldHint {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tagRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tagRow .input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.tagRow .ghostButton {
+  flex: none;
+}
+
+.tagAddButton {
+  align-self: flex-start;
+}
+
+/* --- card attachments (#1979) ------------------------------------------------- */
+
+.taskEditor {
+  width: min(934px, calc(100vw - 48px));
+  box-sizing: border-box;
+  height: calc(100vh - 56px);
+  height: calc(100dvh - 56px);
+  max-height: none;
+  padding: 0;
+  gap: 0;
+}
+
+.taskEditor > .modalHeader,
+.taskEditor > .modalFooter {
+  flex: none;
+  padding: 12px 24px;
+}
+
+.taskEditor > .modalHeader {
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.taskEditor > .modalFooter {
+  position: static;
+  margin: 0;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+
+.taskEditor > .modalBody {
+  flex: 1 1 auto;
+  gap: 0;
+  overscroll-behavior: contain;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.taskEditor > .modalBody > .aiParse,
+.taskEditorError {
+  margin: 16px 24px 0;
+}
+
+.taskFormLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 31%);
+}
+
+.taskFormContent,
+.taskFormSettings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px 24px;
+}
+
+.taskFormSettings {
+  gap: 10px;
+  border-left: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.taskFormSettings h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.taskFormSettings .formSectionTitle {
+  flex: none;
+  max-width: 55%;
+}
+
+.taskFormSettings :is(input, select),
+.taskFormContent :is(input, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.taskFormSettings .scheduleRow,
+.taskFormSettings .scheduleZone {
+  flex-wrap: wrap;
+}
+
+.taskFormSettings .scheduleZone > :is(input, select) {
+  min-width: 0;
+  flex: 1 1 140px;
+}
+
+.taskTextarea {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.taskTextarea > .input {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-width: 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.taskTextarea > span {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.taskTextarea > textarea {
+  display: block;
+  overflow: hidden;
+  resize: none;
+}
+
+.taskPromptLabel {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.promptAttachmentField {
+  min-width: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsh-tb-control-radius);
+  background: var(--dsw-specific-input-major);
+}
+
+.promptAttachmentField:focus-within,
+.promptAttachmentField[data-state='active'] {
+  border-color: var(--dsw-alias-border-focus);
+}
+
+.promptAttachmentField > .taskTextarea > .input {
+  border-color: transparent;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.promptAttachmentToolbar {
+  padding: 7px 10px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 0 0 var(--dsh-tb-control-radius) var(--dsh-tb-control-radius);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.attachmentDrop {
+  display: flex;
+  align-items: center;
+  gap: 6px 10px;
+  flex-wrap: wrap;
+}
+
+.attachmentDropHint {
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.detailPromptAttachments {
+  display: grid;
+  gap: 6px;
+}
+
+/* Keep the desktop shell and both columns fixed while the Prompt and
+   expanded settings scroll within their own bounds. Narrow or short windows
+   use the body scroll so every field remains reachable. */
+@media (min-width: 769px) and (min-height: 601px) {
+  .taskEditor > .modalBody {
+    overflow: clip;
+    scrollbar-gutter: auto;
+  }
+
+  .taskEditor > .modalBody > .taskFormLayout {
+    flex: 1 1 0;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .taskEditor > .modalBody > .aiParse,
+  .taskEditorError {
+    max-height: 24dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .taskFormContent > :not(.taskPromptField),
+  .taskFormSettings > *,
+  .taskPromptLabel,
+  .promptAttachmentToolbar {
+    flex: none;
+  }
+
+  .taskFormSettings {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .taskDescriptionField .taskTextarea {
+    max-height: 80px;
+    grid-template-rows: minmax(0, auto);
+  }
+
+  .taskPromptField,
+  .promptAttachmentField,
+  .taskPromptField .taskTextarea {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .promptAttachmentField {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .taskPromptField .taskTextarea {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .taskPromptField .taskTextarea > span {
+    display: none;
+  }
+
+  .taskPromptField .taskTextarea > textarea,
+  .taskDescriptionField .taskTextarea > textarea {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .promptAttachmentToolbar .attachmentList {
+    max-height: min(16dvh, 128px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 768px) {
+  .taskEditor {
+    width: 100vw;
+    height: 100dvh;
+  }
+
+  .taskFormLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .taskFormContent,
+  .taskFormSettings {
+    padding: 16px max(16px, env(safe-area-inset-right)) 16px max(16px, env(safe-area-inset-left));
+  }
+
+  .taskFormSettings {
+    border-top: 1px solid var(--dsw-alias-border-l2);
+    border-left: 0;
+  }
+
+  .taskEditor > .modalHeader {
+    padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+  }
+
+  .taskEditor > .modalFooter {
+    padding: 8px max(16px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    gap: 6px;
+  }
+
+  .taskEditor > .modalFooter > button {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .taskEditor > .modalBody > .aiParse,
+  .taskEditorError {
+    margin: 12px 16px 0;
+  }
+
+  .promptAttachmentToolbar .iconButton {
+    min-width: 44px;
+  }
+}
+
+.attachmentList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachmentRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--dsw-alias-border-subtle);
+  border-radius: 6px;
+}
+
+.attachmentThumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--dsw-alias-surface-raised);
+}
+
+.attachmentName {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.attachmentMeta {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.projectDialog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: none;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+}
+
+.projectDialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* --- AI parse of pasted text (#1540) ------------------------------------------ */
+
+.aiParse {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+}
+
+.aiParseRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aiParseRow .select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.aiParseRow .ghostButton,
+.aiParseRow .primaryButton {
+  flex: none;
+}
+
+/* --- subtask tree (parent link, cascade runs) ---------------------------------
+ * A subtask is an ordinary card with a parent link; the badges below only mark
+ * the lineage on the board, and the detail block lists the direct children
+ * with their statuses.
+ * ----------------------------------------------------------------------------- */
+
+/* Lineage badges reuse the card's filled badge slot: one row-tall pill, the
+   tone's secondary surface with the tone's primary colour as text. The border
+   is gone so the pill is exactly one row slot tall. */
+.cardSubtask {
+  max-width: 100%;
+  padding: 0 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: var(--dsh-tb-card-row);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardSubtask[data-tone='failed'] {
+  color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-state-error-secondary);
+}
+
+.cardSubtask[data-tone='running'] {
+  color: var(--dsw-alias-state-warn-primary);
+  background: var(--dsw-alias-state-warn-secondary);
+}
+
+.cardSubtask[data-tone='done'] {
+  color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-secondary);
+}
+
+.subtaskList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.subtaskRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.subtaskRow .linkButton:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.subtaskAddRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pickList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.pickRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+}
+
+.pickTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}
+

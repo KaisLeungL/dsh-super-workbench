@@ -1,0 +1,16 @@
+{
+  "installedSchedule": "f06a57f6fd5d7b0d2666b4d1b1a27d96aa3035a66de40ad2fc9cef3eba580040",
+  "sourceBuild": "19e34593c76edd42071cfb33bb2136b5c8b308982f187f8acce5e00328434372",
+  "postBuildPatch": {
+    "name": "zod3-desktop-compat",
+    "fromVersion": "0.1.0",
+    "toVersion": "0.1.1",
+    "libBefore": "19e34593c76edd42071cfb33bb2136b5c8b308982f187f8acce5e00328434372",
+    "libAfter": "584c33d8b886a047ae17f63ad304948a66e0903e437be90a8b8ccd66e0f51845",
+    "replacements": [
+      "z$1.iso.datetime( -> z$1.string().datetime(",
+      ".exactOptional() -> .optional()"
+    ],
+    "reason": "desktop profile resolves bare zod to 3.25.76; bundle is built for zod 4"
+  }
+}

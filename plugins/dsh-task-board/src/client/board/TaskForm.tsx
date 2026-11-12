@@ -1,0 +1,354 @@
+/**
+ * Shared task-modal pieces: the overlay shell (backdrop, form, title, error,
+ * footer) and the title/description/prompt field trio used by both the
+ * NewTaskModal and the EditTaskModal. State stays in the owning modal; these
+ * are controlled components.
+ */
+import { useEffect, useId, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import { TAG_NAME_MAX_LENGTH, TAG_PROMPT_MAX_LENGTH, TASK_TAG_LIMIT, normalizeTags, type TaskTag } from '../../core/tasks.ts'
+import { t } from '../locales.ts'
+import css from '../board.module.css'
+import { IconClose, IconPlus } from './icons.tsx'
+import { useDialog, usePresence, type OverlayPhase } from './overlay.tsx'
+
+/** DOM id shared by the tag-name inputs and their datalist (one board at a time). */
+const TAG_NAME_LIST_ID = 'dsh-task-board-tag-names'
+
+export function TargetDateField({ value, disabled, onChange }: {
+  value: string
+  disabled: boolean
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className={css.field}>
+      <span className={css.fieldLabel}>{t('card.targetDate')}</span>
+      <input className={css.input} type="date" value={value} disabled={disabled}
+        aria-label={t('card.targetDate')} onChange={event => { onChange(event.target.value) }} />
+      <span className={css.fieldHint}>{t('card.targetDateHint')}</span>
+    </label>
+  )
+}
+
+/** Modal overlay: closes on backdrop press, submits through the form. */
+export function ModalShell({
+  ariaLabel,
+  title,
+  error,
+  pending,
+  submitLabel,
+  onSubmit,
+  onClose,
+  secondaryAction,
+  headerAction,
+  wide = false,
+  blocked = false,
+  phase = 'open',
+  children,
+}: {
+  ariaLabel: string
+  title: string
+  error: string | undefined
+  pending: boolean
+  submitLabel: string
+  onSubmit: () => void
+  onClose: () => void
+  /** Optional second action beside the primary submit (e.g. create and run). */
+  secondaryAction?: { label: string; onSubmit: () => void }
+  headerAction?: ReactNode
+  wide?: boolean
+  blocked?: boolean
+  /** Which leg of the enter/exit motion pair the surface is on. */
+  phase?: OverlayPhase
+  children: ReactNode
+}) {
+  const dialog = useDialog<HTMLFormElement>(onClose, phase)
+  return (
+    <div className={css.modalBackdrop} data-state={phase} onMouseDown={dialog.onMouseDown}>
+      <form
+        ref={dialog.attach}
+        className={wide ? `${css.modal} ${css.taskEditor}` : css.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel}
+        tabIndex={-1}
+        onSubmit={event => { event.preventDefault(); if (!pending && !blocked) onSubmit() }}
+      >
+        {wide ? (
+          <header className={css.modalHeader}>
+            <h2 className={css.modalTitle}>{title}</h2>
+            {headerAction}
+            <button type="button" className={css.iconButton} aria-label={t('detail.close')} onClick={onClose}>
+              <IconClose size={16} />
+            </button>
+          </header>
+        ) : <h2 className={css.modalTitle}>{title}</h2>}
+
+        <div className={css.modalBody}>
+          {wide && error !== undefined && <div className={css.taskEditorError}><TaskValidationError message={error} /></div>}
+          {children}
+        </div>
+
+        {!wide && error !== undefined && <p className={css.formError} role="alert">{error}</p>}
+
+        <footer className={css.modalFooter}>
+          <button type="button" className={css.ghostButton} onClick={onClose}>
+            {t('new.cancel')}
+          </button>
+          {secondaryAction !== undefined && (
+            <button
+              type="button"
+              className={css.ghostButton}
+              disabled={pending || blocked}
+              onClick={secondaryAction.onSubmit}
+            >
+              {secondaryAction.label}
+            </button>
+          )}
+          <button type="submit" className={css.primaryButton} disabled={pending || blocked}>
+            {submitLabel}
+          </button>
+        </footer>
+      </form>
+    </div>
+  )
+}
+
+/**
+ * One collapsible region of a task form (create/edit dialog UX): the form
+ * groups its configuration into a few regions instead of stacking every field
+ * in one long column, so a normal-sized dialog needs no scrollbar. A collapsed
+ * region keeps a one-line summary of the values it holds, so nothing is hidden
+ * without a trace; a region holding a blocking error is forced open by its
+ * owner (forceOpen) rather than reporting the error out of sight.
+ *
+ * The body is the panel fold's body under another name: it enters and leaves on
+ * the same animation pair, and `usePresence` keeps it mounted through the exit
+ * leg so collapsing never snaps.
+ */
+export function CollapsibleSection({
+  title,
+  summary,
+  defaultOpen = false,
+  forceOpen = false,
+  children,
+}: {
+  title: string
+  /** One-line value preview rendered only while the region is collapsed. */
+  summary?: string | undefined
+  /** Whether the region starts expanded (the owner's default layout). */
+  defaultOpen?: boolean
+  /** Open regardless of the stored state: an error inside must stay visible. */
+  forceOpen?: boolean
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  const panelId = useId()
+  const expanded = forceOpen || open
+  const presence = usePresence(expanded)
+  // The one-line preview is also the row's title, so the line that ellipsizes
+  // in the header stays readable in full (same rule as the panel's folds).
+  const fullLine = summary ?? ''
+  return (
+    <section className={css.formSection} data-dsh-part="form-section" data-open={expanded ? 'true' : undefined}>
+      <button
+        type="button"
+        className={css.formSectionHeader}
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        title={fullLine === '' ? undefined : fullLine}
+        onClick={() => { setOpen(value => !value) }}
+      >
+        <span className={css.formSectionChevron} aria-hidden="true" />
+        <span className={css.formSectionTitle}>{title}</span>
+        {!expanded && summary !== undefined && summary !== '' && (
+          <span className={css.formSectionSummary}>{summary}</span>
+        )}
+      </button>
+      {presence.mounted && (
+        <div className={css.formSectionBody} id={panelId} data-state={presence.phase}>
+          {children}
+        </div>
+      )}
+    </section>
+  )
+}
+
+export function TaskFormLayout({ content, settings }: { content: ReactNode; settings: ReactNode }) {
+  return (
+    <div className={css.taskFormLayout}>
+      <div className={css.taskFormContent}>{content}</div>
+      <section className={css.taskFormSettings} aria-label={t('new.section.settings')}>
+        <h3>{t('new.section.settings')}</h3>
+        {settings}
+      </section>
+    </div>
+  )
+}
+
+export function TaskValidationError({ message }: { message: string }) {
+  const ref = useRef<HTMLParagraphElement>(null)
+  useEffect(() => {
+    const error = ref.current
+    const field = error?.closest(`.${css.formSectionBody}`)?.querySelector<HTMLElement>('[aria-invalid="true"]')
+    field?.focus({ preventScroll: true })
+    if (field !== undefined && field !== null) field.scrollIntoView?.({ block: 'center' })
+    else error?.scrollIntoView?.({ block: 'nearest' })
+  }, [message])
+  return <p ref={ref} className={css.formError} role="alert">{message}</p>
+}
+
+/** The mirror gives long drafts their natural height without a second scroll surface. */
+export function TaskTextarea({ value, ...props }: ComponentPropsWithoutRef<'textarea'> & { value: string }) {
+  return (
+    <span className={css.taskTextarea}>
+      <span className={css.input} aria-hidden="true">{value + ' '}</span>
+      <textarea {...props} className={css.input} value={value} />
+    </span>
+  )
+}
+
+/** Title + description + prompt fields shared by the new and edit task forms. */
+export function TaskContentFields({
+  title,
+  description,
+  prompt,
+  onTitleChange,
+  onDescriptionChange,
+  onPromptChange,
+  renderPrompt,
+}: {
+  title: string
+  description: string
+  prompt: string
+  /** Receives the new title; the owner also clears its error state. */
+  onTitleChange: (value: string) => void
+  onDescriptionChange: (value: string) => void
+  onPromptChange: (value: string) => void
+  renderPrompt: (input: ReactNode) => ReactNode
+}) {
+  const promptId = useId()
+  const promptHintId = useId()
+  return (
+    <>
+      <label className={css.field}>
+        <span className={css.fieldLabel}>{t('new.title')}</span>
+        <input
+          className={css.input}
+          value={title}
+          data-dsh-autofocus
+          placeholder={t('new.titlePlaceholder')}
+          onChange={event => onTitleChange(event.target.value)}
+        />
+      </label>
+
+      <label className={`${css.field} ${css.taskDescriptionField}`}>
+        <span className={css.fieldLabel}>{t('new.description')}</span>
+        <TaskTextarea
+          rows={2}
+          value={description}
+          placeholder={t('new.descriptionPlaceholder')}
+          onChange={event => onDescriptionChange(event.target.value)}
+        />
+      </label>
+
+      <div className={`${css.field} ${css.taskPromptField}`}>
+        <div className={css.taskPromptLabel}>
+          <label htmlFor={promptId} className={css.fieldLabel}>{t('new.prompt')}</label>
+          <span id={promptHintId} className={css.fieldHint}>{t('new.promptFallback')}</span>
+        </div>
+        {renderPrompt(
+          <TaskTextarea
+            id={promptId}
+            rows={5}
+            value={prompt}
+            aria-describedby={promptHintId}
+            placeholder={t('new.promptPlaceholder')}
+            onChange={event => onPromptChange(event.target.value)}
+          />,
+        )}
+      </div>
+    </>
+  )
+}
+
+/**
+ * Task labels (issue #1521): one row per label holding the badge name and an
+ * optional execution hint. The name inputs offer the labels already used on the
+ * board through a datalist, and picking one adopts its hint when the row has
+ * none — so a business line is defined once and reused by every later task.
+ */
+export function TaskTagFields({
+  tags,
+  knownTags,
+  onChange,
+}: {
+  tags: TaskTag[]
+  /** Labels already carried elsewhere on the board. */
+  knownTags: TaskTag[]
+  onChange: (tags: TaskTag[]) => void
+}) {
+  const update = (index: number, patch: Partial<TaskTag>): void => {
+    onChange(tags.map((tag, position) => (position === index ? { ...tag, ...patch } : tag)))
+  }
+
+  return (
+    <div className={css.field}>
+      <span className={css.fieldLabel}>{t('new.tags')}</span>
+      <span className={css.fieldHint}>{t('new.tagsHint')}</span>
+      {tags.map((tag, index) => (
+        <div className={css.tagRow} key={index}>
+          <input
+            className={css.input}
+            list={TAG_NAME_LIST_ID}
+            value={tag.name}
+            maxLength={TAG_NAME_MAX_LENGTH}
+            placeholder={t('new.tagNamePlaceholder')}
+            aria-label={t('new.tagName')}
+            onChange={(event) => {
+              const name = event.target.value
+              const known = knownTags.find(candidate => candidate.name === name)
+              const adoptsHint = known?.promptPrefix !== undefined && (tag.promptPrefix ?? '').trim() === ''
+              update(index, adoptsHint ? { name, promptPrefix: known.promptPrefix } : { name })
+            }}
+          />
+          <input
+            className={css.input}
+            value={tag.promptPrefix ?? ''}
+            maxLength={TAG_PROMPT_MAX_LENGTH}
+            placeholder={t('new.tagPromptPlaceholder')}
+            aria-label={t('new.tagPrompt')}
+            onChange={event => { update(index, { promptPrefix: event.target.value }) }}
+          />
+          <button
+            type="button"
+            className={css.iconButton}
+            aria-label={t('new.tagRemove', { name: tag.name })}
+            onClick={() => { onChange(tags.filter((_, position) => position !== index)) }}
+          >
+            <IconClose size={14} />
+          </button>
+        </div>
+      ))}
+      <datalist id={TAG_NAME_LIST_ID}>
+        {knownTags.map(tag => <option key={tag.name} value={tag.name} />)}
+      </datalist>
+      <button
+        type="button"
+        className={css.ghostButton + ' ' + css.tagAddButton}
+        disabled={tags.length >= TASK_TAG_LIMIT}
+        onClick={() => { onChange([...tags, { name: '' }]) }}
+      >
+        <IconPlus size={14} />
+        {t('new.tagAdd')}
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Clean a tag list via normalizeTags: trim, drop blanks and duplicates, cap
+ * lengths and count, so the wire always carries a valid tag list.
+ */
+export function cleanTags(tags: readonly TaskTag[]): TaskTag[] {
+  return normalizeTags(tags) ?? []
+}

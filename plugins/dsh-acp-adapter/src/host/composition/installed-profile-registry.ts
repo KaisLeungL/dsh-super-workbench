@@ -1,0 +1,887 @@
+import { ManagedChatGpt } from './managed-chatgpt.ts'
+import { ManagedCodexRuntime } from './managed-codex-runtime.ts'
+/** Live ACP routes derived from native volatile plugin configuration. */
+/// <reference types="node" />
+
+import { resolveTerminalJobs } from './terminal-jobs.ts'
+import { resolveQwenTaskJobs } from './qwen-task-jobs.ts'
+import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { createDshToolBridge, createDshToolBridgeKey } from '../tools/bridge.ts'
+import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import type { AdapterRegistrationHandle } from '@deepseek-ai/dsh-llm'
+import type { AcpProbeOptions } from '../../protocol/v1/types.ts'
+import { acpAgentIdFromRoute, acpRouteId } from '../../domain/session/agent-config.ts'
+import type { AcpAgentConfig, AcpResolvedAgent } from '../../domain/session/agent-config.ts'
+import { createTeamManagement } from '../teams/management.ts'
+import { createToolApprovalPolicyReader } from '../subagent/tool-approval-policy.ts'
+import { createApprovalChildrenReader } from '../subagent/approval-children.ts'
+import { createAcpLogger } from '../../domain/observability/logging.ts'
+import { acpProbeConfigKey } from './llm-stub.ts'
+import { installExternalAgentContext } from './external-agent-context.ts'
+import { externalAgentApproval } from './external-agent-approval.ts'
+import { externalAgentPermissionQuestions } from './external-agent-questions.ts'
+import { AcpProfileAdapter } from './profile-adapter.ts'
+import { installWorkingDirectoryGuard } from './working-directory-guard.ts'
+import { installAcpForkTools } from './fork-tools.ts'
+import { profileLaunchIdentityHash } from '../../domain/session/launch-fingerprint.ts'
+import type { SubprocessSeamResolution } from '../../runtime/process/subprocess.ts'
+import { installAcpSidecar } from '../../persistence/sidecar.ts'
+import type { AcpSidecar } from '../../persistence/sidecar.ts'
+import type { AcpNativeUserQuestionService } from '../../domain/policy/elicitation.ts'
+import type { AcpNativeQuestionBinding } from './profile-adapter.ts'
+import type { Session } from '@deepseek-ai/dsh-session'
+import { bindExecutionProjection, acpExecutionProjection, acpSessionView, readSessionFacts } from './session-facts.ts'
+import type { DispatchLedgerStore } from '../../runtime/session/dispatch-ledger.ts'
+import { resolveSubprocessSeam } from './subprocess.ts'
+import { AcpRemoteService } from '../../remote/service.ts'
+import { auditTimelineRowOf } from './audit-row.ts'
+import { installAcpBackendGuard } from './backend-guard.ts'
+import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
+import { installExternalChildCatalog } from '../subagent/catalog-publication.ts'
+import { ExternalSubagentProjector } from '../subagent/external-projector.ts'
+import type { AcpRecoveryView } from '../../contract/remote.ts'
+import type { AcpRecoveryState } from '../../persistence/sidecar.ts'
+
+export { acpProbeConfigKey }
+
+export type ActivityReadStatus = 'owned' | 'binding-pending' | 'denied'
+
+/**
+ * Resolve the activity stream's strict read status. A confirmed owned live ACP
+ * route with no durable binding returns a temporary pending signal for initial-
+ * follow retry; it never grants access. Malformed records remain denied,
+ * while storage failures propagate so callers can retry without seeing a false
+ * healthy or unauthorized result.
+ */
+export async function activityReadStatusOf(input: {
+  readonly sessionId: string
+  readonly sidecar: Pick<AcpSidecar, 'hasDurableActivityOwner' | 'readLatestBinding'> | undefined
+  readonly liveProvider: string | undefined
+  readonly ownedProviders: ReadonlySet<string>
+}): Promise<ActivityReadStatus> {
+  if (input.sidecar === undefined) return 'denied'
+  if (await input.sidecar.hasDurableActivityOwner(input.sessionId as never)) return 'owned'
+  const binding = await input.sidecar.readLatestBinding(input.sessionId as never)
+  if (binding !== undefined) return 'denied'
+  // Include an owner committed between the first owner check and binding read.
+  if (await input.sidecar.hasDurableActivityOwner(input.sessionId as never)) return 'owned'
+  return input.liveProvider !== undefined && input.ownedProviders.has(input.liveProvider) ? 'binding-pending' : 'denied'
+}
+
+/** Compose volatile settlement context over the recovery fact without persisting it. */
+export function recoveryViewWithLocalStatus(
+  sessionId: string,
+  visibleState: AcpRecoveryState | undefined,
+  localStatus: AcpRecoveryView['localStatus'],
+): AcpRecoveryView | undefined {
+  if (visibleState !== undefined && visibleState.kind !== 'healthy')
+    return {
+      dshSessionId: visibleState.dshSessionId,
+      kind: visibleState.kind,
+      cause: visibleState.cause ?? null,
+      detail: visibleState.detail ?? null,
+      provider: visibleState.provider ?? null,
+      acpSessionId: visibleState.acpSessionId ?? null,
+      generation: visibleState.generation ?? null,
+      interruptedTurnId: visibleState.interruptedTurnId ?? null,
+      lastAttemptAt: visibleState.lastAttemptAt ?? null,
+      lastUserAction: visibleState.lastUserAction ?? null,
+      updatedAt: visibleState.updatedAt,
+    }
+  if (visibleState === undefined && localStatus === undefined) return undefined
+  return {
+    dshSessionId: visibleState?.dshSessionId ?? sessionId,
+    kind: 'healthy',
+    ...(localStatus === undefined ? {} : { localStatus }),
+    cause: visibleState?.cause ?? null,
+    detail: visibleState?.detail ?? null,
+    provider: visibleState?.provider ?? null,
+    acpSessionId: visibleState?.acpSessionId ?? null,
+    generation: visibleState?.generation ?? null,
+    interruptedTurnId: visibleState?.interruptedTurnId ?? null,
+    lastAttemptAt: visibleState?.lastAttemptAt ?? null,
+    lastUserAction: visibleState?.lastUserAction ?? null,
+    updatedAt: visibleState?.updatedAt ?? Date.now(),
+  }
+}
+
+export { acpSettingsSchema } from './config.ts'
+export type { AcpSettings, AcpSettingsSchema } from './config.ts'
+import type { Config } from './config.ts'
+
+async function flushClosedParent(
+  store: { get(id: string): Session | undefined; flush(session: Session): Promise<boolean> },
+  sessionId: string,
+  expected: Session,
+  isOpen: () => boolean,
+): Promise<boolean> {
+  // The adapter starts projection just before yielding the terminal chunk.
+  // Give the stock AgentLoop a bounded window to append turn/end; publishing a
+  // child against an open or replaced parent would assert lineage too early.
+  const deadline = Date.now() + 10_000
+  while (isOpen()) {
+    if (store.get(sessionId) !== expected || Date.now() >= deadline) return false
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 10)
+    })
+  }
+  if (store.get(sessionId) !== expected) return false
+  return await store.flush(expected)
+}
+
+/** What the registry hands to `registerAdapter`/`replace`: route id plus the display name the selector shows. */
+export interface AcpRegistrationFact {
+  provider: string
+  displayName: string
+}
+
+/**
+ * Route facts captured by the LLM registry at registration time, sorted by
+ * provider so a settings document that merely reorders its keys is not
+ * mistaken for a route change (llm-pi-ai precedent). `displayName` rides along
+ * because the registry snapshots `providerInfo().name` per route: a rename
+ * that did not re-register would leave the old label showing.
+ */
+export function acpRegistrationFacts(agents: Record<string, AcpAgentConfig>): AcpRegistrationFact[] {
+  return Object.entries(agents)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([id, config]) => ({ provider: acpRouteId(id), displayName: config.name }))
+}
+
+/** Live face of the installed-profile route registry.
+ * This is deliberately not the official ACP Registry catalog. */
+export interface InstalledProfileRegistry {
+  /**
+   * Resolves after the initial settings snapshot has been applied to the LLM
+   * route registry.  Session creation can race Cordis' inject callback during
+   * startup; callers must await this barrier before resolving an `acp-*` route,
+   * otherwise a configured ACP default can be mistaken for an unknown native
+   * provider and fall through to DSH's LLM stub.
+   */
+  readonly ready: Promise<void>
+  /**
+   * Current agents, keyed by agent id (detached snapshot). Writes go through
+   * the settings service (`settings.update/mutate/replace` on `dsh-acp`); this
+   * registry is the read + watch + route-registration side.
+   */
+  agents(): ReadonlyMap<string, AcpAgentConfig>
+  /** Resolve an LLM route id (`acp-<id>`) to its agent; undefined for foreign/unknown routes. */
+  resolveRoute(provider: string): AcpResolvedAgent | undefined
+}
+
+export interface InstalledProfileRegistryOptions {
+  /** Mount the additive dshAcp activity Remote in the provider composition.
+   * The additive provider composition mounts its own service when enabled. */
+  installRemote?: boolean
+  /** Connection knobs forwarded to every probe (tests shorten the teardown ladder). */
+  probeOptions?: AcpProbeOptions
+  /**
+   * 加载期解析的 subprocess seam（host composition 经
+   * ./subprocess.ts 的 `resolveSubprocessSeam` 解析一次后传入；probe 经它
+   * spawn）。缺席 = 未接线，probe 以 spawn-failure fail closed。
+   */
+  subprocess?: SubprocessSeamResolution
+}
+
+/** Release ACP producers alongside native jobs during owner-scope disposal.
+ * session/disposed follows that scope's cleanup, so waiting for it alone
+ * deadlocks when jobs are still waiting for the Agent process to stop. */
+export function installAcpSessionRuntimeCleanup(
+  ctx: Context,
+  disposeSession: (session: { readonly id: string; readonly identity?: object }) => Promise<void>,
+): () => Promise<void> {
+  const owners = new Map<Agent, () => void>()
+  const pendingCleanups = new Set<Promise<void>>()
+  let closed = false
+  let closing: Promise<void> | undefined
+  const attach = (agent: Agent): void => {
+    if (closed || owners.has(agent)) return
+    const detach = agent.ctx.effect(
+      () => () => {
+        const operation = Promise.resolve().then(() => disposeSession({ id: agent.id, identity: agent.session }))
+        pendingCleanups.add(operation)
+        const release = () => {
+          pendingCleanups.delete(operation)
+          owners.delete(agent)
+        }
+        void operation.then(release, release)
+        return operation
+      },
+      'ACP session runtime owner cleanup',
+    )
+    owners.set(agent, detach)
+  }
+  ctx.on('agent/created', ({ agent }) => {
+    attach(agent)
+    return undefined
+  })
+  // A plugin can be enabled after the owner was created.
+  for (const agent of ctx.get('agents', false)?.list() ?? []) attach(agent)
+  ctx.on('session/disposed', disposeSession)
+  return () => {
+    if (closing !== undefined) return closing
+    closed = true
+    return (closing = (async () => {
+      const failures = new Set<unknown>()
+      const detaching = [...owners.values()].map(async (detach) => {
+        await detach()
+      })
+      // Cordis detachers are single-shot. A second call does not join an
+      // owner-initiated cleanup, so retain and await its actual operation.
+      while (detaching.length > 0 || pendingCleanups.size > 0) {
+        const results = await Promise.allSettled([...detaching.splice(0), ...pendingCleanups])
+        for (const result of results) if (result.status === 'rejected') failures.add(result.reason)
+      }
+      owners.clear()
+      if (failures.size > 0) throw new AggregateError([...failures], 'ACP session runtime cleanup failed')
+    })())
+  }
+}
+
+/** Keep ACP routes synchronized with Loader-owned volatile Agent configuration. */
+export async function installInstalledProfileRegistry(
+  ctx: Context,
+  config: Config,
+  options: InstalledProfileRegistryOptions = {},
+): Promise<InstalledProfileRegistry> {
+  const toolBridgeKey = createDshToolBridgeKey()
+  const executionProjection = await ctx.sessionProjections.register(acpExecutionProjection)
+  const releaseExecutionReader = bindExecutionProjection(ctx, executionProjection)
+  let disposed = false
+  const log = createAcpLogger(ctx.logger)
+  const sidecar = installAcpSidecar(ctx)
+  if (sidecar !== undefined) installAcpBackendGuard(ctx, { sidecar })
+  // The additive composition has no AgentLoop constructor to hand this seam
+  // down. Resolve the host-owned service at the composition boundary instead;
+  // keeping the explicit option is useful for isolated tests and embedders.
+  const subprocess = options.subprocess ?? resolveSubprocessSeam(ctx)
+  const holder = ctx as Context & { get(name: string, strict?: boolean): unknown }
+  const sessionStore =
+    typeof holder.get === 'function'
+      ? (holder.get('sessions') as
+          { get(id: string): Session | undefined; flush(session: Session): Promise<boolean> } | undefined)
+      : undefined
+  let externalSubagentProjector: ExternalSubagentProjector | undefined
+  const projectionOwners = new Set<ExternalSubagentProjector>()
+  const persistenceFiber =
+    sidecar === undefined
+      ? undefined
+      : ctx.inject(['sessionPersistence', 'sessions', 'sessionProjections'], (childCtx: Context) => {
+          if (disposed) return
+          const persistence = (childCtx as Context & { sessionPersistence: SessionPersistence }).sessionPersistence
+          let publishChild: ReturnType<typeof installExternalChildCatalog> | undefined
+          const catalog =
+            sessionStore === undefined
+              ? undefined
+              : childCtx.plugin({
+                  name: 'dsh-acp-external-child-catalog',
+                  apply(catalogCtx: Context) {
+                    publishChild = installExternalChildCatalog(catalogCtx, sessionStore)
+                  },
+                })
+          const projector = new ExternalSubagentProjector(
+            persistence,
+            sidecar,
+            catalog === undefined
+              ? undefined
+              : async (header, label) => {
+                  await catalog.await()
+                  if (publishChild === undefined) throw new Error('ACP_SUBAGENT_CATALOG_UNAVAILABLE')
+                  await publishChild(header, label)
+                },
+          )
+          projectionOwners.add(projector)
+          externalSubagentProjector = projector
+          void projector
+            .repairInterrupted()
+            .then((summary) => {
+              if (summary.repaired > 0 || summary.conflicted > 0) {
+                log.info(
+                  `dsh-acp: external subagent projection recovery completed (repaired=${summary.repaired}, conflicted=${summary.conflicted})`,
+                  {
+                    operation: 'subagent-projection-repair',
+                    result: summary.conflicted > 0 ? 'conflict' : 'ok',
+                  },
+                )
+              }
+            })
+            .catch((error: unknown) => {
+              log.warn(
+                `dsh-acp: external subagent projection recovery failed: ${error instanceof Error ? error.message : String(error)}`,
+                { operation: 'subagent-projection-repair', result: 'error' },
+              )
+            })
+          childCtx.effect(function* () {
+            // Keep the exact catalog fiber registered while accepted transactions finish.
+            if (catalog !== undefined) yield catalog.dispose
+            yield childCtx.effect(() => async () => {
+              if (externalSubagentProjector === projector) externalSubagentProjector = undefined
+              await projector.close()
+              projectionOwners.delete(projector)
+            })
+          }, 'dsh-acp: drain external subagent projector before catalog disposal')
+        })
+  let attachments: Pick<AttachmentStore, 'readImage' | 'imageLimits' | 'saveImages'> | undefined
+  try {
+    attachments = holder.get('attachments') as
+      Pick<AttachmentStore, 'readImage' | 'imageLimits' | 'saveImages'> | undefined
+  } catch {
+    attachments = undefined
+  }
+  // Resolve these host-owned services lazily. The provider composition can be
+  // mounted before userQuestions/agents, and a live Agent must be looked up for
+  // every interactive request so DSH remains the lifecycle and audit owner.
+  const resolveNativeQuestions = (dshSessionId: string): AcpNativeQuestionBinding | undefined => {
+    let userQuestions: AcpNativeUserQuestionService | undefined
+    let approval: import('../../domain/policy/permissions.ts').AcpNativeApprovalService | undefined
+    let agents: { get(id: string): unknown } | undefined
+    try {
+      userQuestions = (ctx as unknown as { userQuestions?: AcpNativeUserQuestionService }).userQuestions
+    } catch {
+      /* optional seam */
+    }
+    try {
+      agents = (ctx as unknown as { agents?: { get(id: string): unknown } }).agents
+    } catch {
+      /* optional seam */
+    }
+    try {
+      userQuestions ??= holder.get('userQuestions') as AcpNativeUserQuestionService | undefined
+    } catch {
+      /* optional seam */
+    }
+    try {
+      approval = holder.get('approval') as
+        import('../../domain/policy/permissions.ts').AcpNativeApprovalService | undefined
+    } catch {
+      /* optional seam */
+    }
+    try {
+      agents ??= holder.get('agents') as { get(id: string): unknown } | undefined
+    } catch {
+      /* optional seam */
+    }
+    if (
+      (userQuestions === undefined && approval === undefined) ||
+      agents === undefined ||
+      agents.get(dshSessionId) === undefined
+    )
+      return undefined
+    // Read the native locale preference for every request so language changes
+    // take effect without restarting the ACP session. Browser detection alone
+    // is not a host setting; absent preferences use the English fallback.
+    let locale: string | undefined
+    try {
+      const settings = holder.get('settings') as
+        Pick<import('@deepseek-ai/dsh-settings').SettingsForms, 'describe'> | undefined
+      const value = settings?.describe().find((row) => row.ns === 'locale')?.value
+      if (value !== null && typeof value === 'object' && 'preference' in value && typeof value.preference === 'string')
+        locale = value.preference
+    } catch {
+      /* optional locale preference */
+    }
+    const requestOwner = agents.get(dshSessionId) as Agent
+    return {
+      ...(userQuestions === undefined
+        ? {}
+        : {
+            userQuestions,
+            permissionQuestions: externalAgentPermissionQuestions(
+              ctx,
+              () => agents?.get(dshSessionId) as Agent | undefined,
+              userQuestions,
+              locale,
+            ),
+          }),
+      ...(approval === undefined
+        ? {}
+        : { approval: externalAgentApproval(ctx, () => agents?.get(dshSessionId) as Agent | undefined) }),
+      getAgent: () => agents?.get(dshSessionId),
+      onUnavailable: (issue) => {
+        if (agents?.get(dshSessionId) !== requestOwner || requestOwner.status !== 'running') return
+        ctx.emit('api-session/error', requestOwner.id, `${issue.message} (${issue.code})`)
+      },
+      ...(locale === undefined ? {} : { locale }),
+    }
+  }
+  const ledgerStore: DispatchLedgerStore =
+    sidecar === undefined
+      ? {
+          begin: async () => {
+            throw new Error('ACP sidecar is unavailable; durable dispatch ledger is required')
+          },
+          settle: async () => {
+            throw new Error('ACP sidecar is unavailable; durable dispatch ledger is required')
+          },
+          read: async () => undefined,
+        }
+      : {
+          begin: (record) => sidecar.beginDispatch(record),
+          settle: (sessionId, key) =>
+            sidecar.settleDispatch(sessionId as Parameters<AcpSidecar['settleDispatch']>[0], key),
+          read: async (sessionId, key) =>
+            await sidecar.readDispatch(sessionId as Parameters<AcpSidecar['readDispatch']>[0], key),
+        }
+  let agents: Record<string, AcpAgentConfig> = {}
+  // Desired settings and the last successfully installed snapshot are kept
+  // separate. A partially failed registration must never make an old route's
+  // closure observe `undefined` just because the settings watcher advanced.
+  let activeAgents: Record<string, AcpAgentConfig> = {}
+  const managedAuth =
+    typeof ctx.dshHomePath === 'function'
+      ? new ManagedChatGpt({ root: ctx.dshHomePath('dsh-agent-manager', 'chatgpt') })
+      : undefined
+  const managedRuntime = managedAuth
+    ? new ManagedCodexRuntime(ctx.dshHomePath!('dsh-agent-manager', 'codex'), managedAuth, (id) => agents[id])
+    : undefined
+  // Adapters are also the owner of provider-composition recovery verbs. Keep
+  // this map available before constructing the additive Remote service.
+  const profileAdapters = new Map<string, AcpProfileAdapter>()
+  const retiringProfiles = new Set<Promise<void>>()
+  const closeProfile = (adapter: AcpProfileAdapter): Promise<void> => {
+    const completion = Promise.withResolvers<void>()
+    retiringProfiles.add(completion.promise)
+    const release = (): void => {
+      retiringProfiles.delete(completion.promise)
+    }
+    void completion.promise.then(release, release)
+    try {
+      void adapter.close().then(completion.resolve, completion.reject)
+    } catch (error) {
+      completion.reject(error)
+    }
+    return completion.promise
+  }
+  installWorkingDirectoryGuard(ctx, (profileId) => profileAdapters.get(profileId))
+  installAcpForkTools(ctx)
+  const controlSubscribers = new Map<string, Set<() => void>>()
+  const policySubscribers = new Set<() => void>()
+  const notifyPolicySubscribers = (): void => {
+    for (const notify of policySubscribers) notify()
+  }
+  ctx.on('agent/disposed', notifyPolicySubscribers)
+  const readToolApprovalPolicy = createToolApprovalPolicyReader(ctx, {
+    sidecar,
+    sessionOf: (id) => sessionStore?.get(id),
+    ownsProvider: (id) => profileAdapters.has(id),
+    defaultPolicy: () => config.toolApprovalDefault.get(),
+  })
+  const controlsChanged = (sessionId: string): void => {
+    for (const notify of controlSubscribers.get(sessionId) ?? []) notify()
+  }
+  // A turn finishing or a browser leaving the conversation does not dispose
+  // the host session. Its actual teardown releases ACP processes and jobs.
+  const disposeSessionRuntimeCleanup = installAcpSessionRuntimeCleanup(ctx, async (session) => {
+    await Promise.all([...profileAdapters.values()].map((adapter) => adapter.disposeSession(session)))
+  })
+  const ownedSidecar = sidecar
+  const ownedSessionReadGate = async (sessionId: string): Promise<boolean> => {
+    // The sidecar is the authority for both audit and Activity ownership;
+    // SessionStore liveness is intentionally not accepted as a grant.
+    return (await ownedSidecar?.hasDurableActivityOwner(sessionId as never)) ?? false
+  }
+  const activityReadStatus = async (sessionId: string): Promise<'owned' | 'binding-pending' | 'denied'> => {
+    let liveProvider: string | undefined
+    try {
+      liveProvider = sessionStore?.get(sessionId)?.requestHeader()?.config.provider
+    } catch {
+      liveProvider = undefined
+    }
+    return activityReadStatusOf({
+      sessionId,
+      sidecar,
+      liveProvider,
+      ownedProviders: new Set([...profileAdapters.keys()].map(acpRouteId)),
+    })
+  }
+  const canRegisterRemote =
+    typeof (ctx as Context & { reflect?: { provide?: unknown } }).reflect?.provide === 'function'
+  let existingRemote: unknown
+  try {
+    existingRemote = holder.get('dshAcp')
+  } catch {
+    existingRemote = undefined
+  }
+  if (options.installRemote === true && canRegisterRemote && sidecar !== undefined && existingRemote === undefined) {
+    new AcpRemoteService(ctx, {
+      ...(managedAuth ? { managedChatGpt: managedAuth } : {}),
+      registry: {
+        // Remote health addresses a configured profile by its stable settings
+        // id (`codex`), while the LLM registry addresses the execution route
+        // as `acp-codex`. Keep those two namespaces separate; otherwise the
+        // Settings panel's targeted check is always reported as unknown.
+        agents: () => new Map(Object.entries(agents)),
+        // Health delegates to the exact adapter registered for the profile;
+        // this keeps Settings and the stock ModelPicker on one cache/key and
+        // one in-flight probe. There is deliberately no detached fallback.
+        probeCacheFor: (profileId) => profileAdapters.get(profileId),
+        modelsChanged: (profileIds) => {
+          for (const id of profileIds) registrations.get(id)?.replace([acpRouteId(id)])
+        },
+      },
+      // Health's executable/version facts must use the same host subprocess
+      // seam as the ACP probe.  Omitting this made a successful probe coexist
+      // with executable=false/version=null in the Settings panel.
+      subprocess,
+      approvalChildren: createApprovalChildrenReader(ctx, (provider) =>
+        [...profileAdapters.keys()].some((id) => acpRouteId(id) === provider),
+      ),
+      teamManagement: createTeamManagement(
+        ctx,
+        (provider) => [...profileAdapters.keys()].some((id) => acpRouteId(id) === provider),
+        async (id) => {
+          const lookup = await sidecar.readLatestBinding(id as never)
+          return lookup?.status === 'ok' ? lookup.binding.provider : undefined
+        },
+        { sidecar, adapterFor: (provider) => profileAdapters.get(provider.slice(4)) },
+      ),
+      // Header/audit facts are read-only host facts.  Keeping them here makes
+      // the additive provider composition useful to the stock header utility
+      // without creating a second Agent lifecycle in the provider bridge.
+      backendFacts: {
+        readBindingProvider: async (sessionId) => {
+          const lookup = await sidecar.readLatestBinding(sessionId as never).catch(() => undefined)
+          return lookup?.status === 'ok' ? lookup.binding.provider : undefined
+        },
+        peekHeaderProvider: async (sessionId) => {
+          const session = sessionStore?.get(sessionId)
+          if (session === undefined) throw new Error('DSH session is not available')
+          return session.requestHeader()?.config.provider
+        },
+        hasLiveAgent: (sessionId) => sessionStore?.get(sessionId) !== undefined,
+      },
+      bindingFacts: {
+        countBoundSessions: async (provider) => {
+          const bindings = await sidecar.listBindings()
+          return bindings.filter((entry) => entry.binding.provider === provider).length
+        },
+        listBoundProviders: async () => {
+          const bindings = await sidecar.listBindings()
+          return [...new Set(bindings.map((entry) => entry.binding.provider))]
+        },
+      },
+      auditTimeline: {
+        list: async (sessionId, afterSeq, limit, throughSeq) => {
+          const rows = await sidecar.listPage(sessionId as never, afterSeq, limit, throughSeq)
+          return rows.map(auditTimelineRowOf)
+        },
+        hasMore: async (sessionId, seq, throughSeq) =>
+          (await sidecar.listPage(sessionId as never, seq, 1, throughSeq)).length > 0,
+        head: async (sessionId) => sidecar.auditHead(sessionId as never),
+        scanPage: async (sessionId, afterSeq, limit, throughSeq) => {
+          const page = await sidecar.listPageScan(sessionId as never, afterSeq, limit, throughSeq)
+          return { ...page, entries: page.entries.map(auditTimelineRowOf) }
+        },
+      },
+      activityTimeline: {
+        snapshot: (sessionId, limit, filter) => sidecar.activitySnapshot(sessionId as never, limit, filter),
+        page: (sessionId, afterRevision, limit, filter, throughRevision) =>
+          sidecar.activityPage(sessionId as never, afterRevision, limit, filter, throughRevision),
+        head: (sessionId, filter) => sidecar.activityHead(sessionId as never, filter),
+        subscribe: (sessionId, filter, subscriber) =>
+          sidecar.subscribeActivity(sessionId as never, filter ?? {}, subscriber),
+      },
+      ownedSessionReadGate,
+      activityReadStatus,
+      activityAccess: ownedSessionReadGate,
+      projectedSubagentIds: () => sidecar.listProjectedSubagentIds(),
+      imageInputAvailable: attachments !== undefined,
+      recoveryStateStore: {
+        read: async (sessionId) => {
+          const adapters = [...profileAdapters.values()]
+          const fallback = adapters
+            .map((adapter) => adapter.recoveryStateFallback(sessionId))
+            .find((candidate) => candidate !== undefined)
+          // An in-memory gate exists only when durable recovery persistence
+          // failed, so it must outrank any older healthy sidecar record.
+          let visibleState = fallback ?? (await sidecar.readRecoveryState(sessionId as never))
+          if (fallback === undefined && visibleState?.kind === 'reconnect-required') {
+            const profileId =
+              visibleState.provider === undefined ? undefined : acpAgentIdFromRoute(visibleState.provider)
+            const adapter = profileId === undefined ? undefined : profileAdapters.get(profileId)
+            if (await adapter?.isAutomaticDirectoryHandoff(sessionId, visibleState))
+              visibleState = { ...visibleState, kind: 'healthy' }
+          }
+          // A real recovery outcome (especially outcome-unknown) always wins.
+          // Settlement status is volatile display context and is never written
+          // to the recovery sidecar.
+          const localStatus =
+            visibleState === undefined || visibleState.kind === 'healthy'
+              ? adapters
+                  .map((adapter) => adapter.localSettlementStatus(sessionId))
+                  .find((candidate) => candidate !== undefined)
+              : undefined
+          return recoveryViewWithLocalStatus(sessionId, visibleState, localStatus)
+        },
+      },
+      recoveryAdapter: (provider) => {
+        const id = acpAgentIdFromRoute(provider)
+        return id === undefined ? undefined : profileAdapters.get(id)
+      },
+      agentSessionChanges: {
+        canRead: async (sessionId) =>
+          sessionStore?.get(sessionId) !== undefined || (await ownedSessionReadGate(sessionId)),
+        subscribe: (sessionId, changed) => {
+          const subscribers = controlSubscribers.get(sessionId) ?? new Set<() => void>()
+          controlSubscribers.set(sessionId, subscribers)
+          subscribers.add(changed)
+          return () => {
+            subscribers.delete(changed)
+            if (subscribers.size === 0) controlSubscribers.delete(sessionId)
+          }
+        },
+      },
+      toolApprovalPolicy: {
+        read: readToolApprovalPolicy,
+        write: async (sessionId, policy) => {
+          const current = await readToolApprovalPolicy(sessionId)
+          if (!current.editable) throw new Error('ACP_TOOL_APPROVAL_POLICY_INHERITED')
+          const confirmed = await readToolApprovalPolicy(sessionId)
+          if (!confirmed.editable || confirmed.source !== current.source)
+            throw new Error('ACP_TOOL_APPROVAL_POLICY_OWNER_CHANGED')
+          await sidecar.writeToolApprovalPolicy(sessionId as never, policy)
+          return await readToolApprovalPolicy(sessionId)
+        },
+      },
+      toolApprovalPolicyChanges: {
+        subscribe: (changed) => {
+          policySubscribers.add(changed)
+          return () => {
+            policySubscribers.delete(changed)
+          }
+        },
+        notify: notifyPolicySubscribers,
+      },
+      agentSessionControl: (provider) => {
+        const id = acpAgentIdFromRoute(provider)
+        return id === undefined ? undefined : profileAdapters.get(id)
+      },
+    })
+  }
+
+  // Each registered profile adapter owns both its model-catalog probe and the
+  // Settings health view of that probe. There is no detached fallback cache.
+  const registrations = new Map<string, AdapterRegistrationHandle>()
+  const ready = Promise.withResolvers<void>()
+  // A create/resume may already be waiting when the plugin is unloaded.  Do
+  // not leave that caller suspended forever: resolving the barrier lets the
+  // authoritative route lookup fail closed below.  `resolve` is idempotent,
+  // so normal initialization and disposal may safely race.
+  ctx.effect(() => () => ready.resolve(), '@zaimokuza/dsh-acp-adapter: release ACP route readiness waiters')
+  // Facts are constructed by the sorted builder above, so their JSON is
+  // canonical; a string compare replaces a deep-equal helper.
+  let registeredKey = ''
+  const ensureRegistration = (): void => {
+    const facts = acpRegistrationFacts(agents)
+    // Registration facts include the selector label, while the shared launch
+    // identity additionally fences the model catalogue from command/args/env/
+    // runtime edits. Values are hashed and never enter the registration key.
+    const identities = Object.entries(agents)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([id, config]) => [id, profileLaunchIdentityHash(id, config), config.enabled !== false])
+    const key = JSON.stringify({ facts, identities })
+    if (key === registeredKey) {
+      // Registration facts intentionally ignore runtime settings such as env
+      // and args. Still publish the new active snapshot so the route adapter
+      // sees the next immutable generation on its next call.
+      activeAgents = { ...agents }
+      return
+    }
+    const previousActive = activeAgents
+    const created: string[] = []
+    const touched: string[] = []
+    // Existing adapters resolve their config through this detached candidate
+    // during replace/register; restore it if any registration fails.
+    activeAgents = { ...agents }
+    try {
+      for (const id of Object.keys(agents)) {
+        const config = agents[id]
+        if (config === undefined) continue
+        let routeAdapter = profileAdapters.get(id)
+        if (routeAdapter === undefined) {
+          routeAdapter = new AcpProfileAdapter(
+            id,
+            () => activeAgents[id],
+            subprocess,
+            (sessionId) => acpSessionView(ctx, sessionStore?.get(sessionId)),
+            ledgerStore,
+            undefined,
+            undefined,
+            sidecar,
+            attachments,
+            resolveNativeQuestions,
+            sidecar === undefined
+              ? undefined
+              : async (operation) => {
+                  const projector = externalSubagentProjector
+                  if (projector === undefined) throw new Error('ACP_SUBAGENT_PERSISTENCE_UNAVAILABLE')
+                  await projector.withProjection(async (project) => {
+                    await operation(async (observation, context) => {
+                      const store = sessionStore
+                      if (store === undefined) throw new Error('ACP_SUBAGENT_PARENT_UNAVAILABLE')
+                      const parent = store.get(context.parentDshSessionId)
+                      if (parent === undefined) throw new Error('ACP_SUBAGENT_PARENT_UNAVAILABLE')
+                      const result = await project(observation, {
+                        ...context,
+                        flushParent: async () =>
+                          await flushClosedParent(
+                            store,
+                            context.parentDshSessionId,
+                            parent,
+                            () => readSessionFacts(ctx, parent).turnOpen,
+                          ),
+                      })
+                      return result?.childSessionId
+                    })
+                  })
+                },
+            (message) => log.warn(message, { operation: 'claude-draft-subagent-capability' }),
+            (sessionId) => resolveTerminalJobs(ctx, sessionId),
+            (sessionId, capabilities, wireProfile, schemas) =>
+              createDshToolBridge(
+                ctx,
+                sessionId,
+                capabilities,
+                wireProfile,
+                async () => (await readToolApprovalPolicy(sessionId)).policy,
+                notifyPolicySubscribers,
+                schemas,
+              ),
+            (sessionId, schemas) => toolBridgeKey(ctx, sessionId, schemas),
+            controlsChanged,
+            ctx.root,
+            (sessionId) => resolveQwenTaskJobs(ctx, sessionId),
+            managedRuntime ? (config, env) => managedRuntime.prepare(id, config, env) : undefined,
+          )
+          profileAdapters.set(id, routeAdapter)
+        }
+        const route = acpRouteId(id)
+        const handle = registrations.get(id)
+        if (handle === undefined) {
+          registrations.set(id, ctx.llm.registerAdapter([route], routeAdapter))
+          created.push(id)
+        } else {
+          touched.push(id)
+          handle.replace([route])
+        }
+      }
+    } catch (error) {
+      for (const id of created) {
+        try {
+          registrations.get(id)?.()
+        } catch {
+          /* best effort rollback */
+        }
+        registrations.delete(id)
+        const adapter = profileAdapters.get(id)
+        if (adapter !== undefined) void closeProfile(adapter).catch(() => undefined)
+        profileAdapters.delete(id)
+      }
+      activeAgents = previousActive
+      // A replace may have synchronously refreshed host metadata before a
+      // later profile collided. Re-emit the old snapshot for those routes.
+      for (const id of touched) {
+        try {
+          registrations.get(id)?.replace([acpRouteId(id)])
+        } catch {
+          /* best effort */
+        }
+      }
+      throw error
+    }
+    for (const [id, handle] of registrations) {
+      if (agents[id] !== undefined) continue
+      handle()
+      registrations.delete(id)
+      const adapter = profileAdapters.get(id)
+      if (adapter !== undefined) void closeProfile(adapter).catch(() => undefined)
+      profileAdapters.delete(id)
+    }
+    registeredKey = key
+  }
+
+  installExternalAgentContext(ctx, (provider) => {
+    const profileId = acpAgentIdFromRoute(provider ?? '')
+    return profileId !== undefined && registrations.has(profileId)
+  })
+
+  const onSettingsChange = (): void => {
+    // llm-pi-ai precedent: a refused swap (route owned by another adapter
+    // family) keeps the previous routes serving and advances no facts, so
+    // returning to a working configuration re-applies.
+    try {
+      ensureRegistration()
+    } catch (error: unknown) {
+      log.error('dsh-acp: keeping the previously registered routes after a refused update', {
+        operation: 'registry-sync',
+        result: 'error',
+      })
+      log.error(error)
+    }
+  }
+
+  // Capture the exact disposers: Cordis otherwise starts sibling cleanup concurrently.
+  // Accepted projection/repair and final Activity writes retain their registry,
+  // catalog, persistence scope and Sidecar until their final dependency use.
+  ctx.effect(function* () {
+    yield ctx.effect(() => () => {
+      releaseExecutionReader()
+      return executionProjection.dispose()
+    })
+    yield ctx.effect(() => async () => {
+      try {
+        await sidecar?.dispose()
+      } catch (error) {
+        log.warn(`dsh-acp: sidecar disposal failed: ${String(error)}`)
+      }
+    })
+    if (persistenceFiber !== undefined) yield persistenceFiber.dispose
+    yield disposeSessionRuntimeCleanup
+    yield ctx.effect(() => async () => {
+      disposed = true
+      externalSubagentProjector = undefined
+      const projections = [...projectionOwners].map((projector) => projector.close())
+      for (const handle of registrations.values()) {
+        try {
+          handle()
+        } catch (error) {
+          log.warn(`dsh-acp: route disposal failed: ${String(error)}`)
+        }
+      }
+      registrations.clear()
+      const results = await Promise.allSettled([...profileAdapters.values()].map(closeProfile))
+      for (const result of results) {
+        if (result.status === 'rejected') log.warn(`dsh-acp: profile runtime disposal failed: ${String(result.reason)}`)
+      }
+      profileAdapters.clear()
+      while (retiringProfiles.size > 0) await Promise.allSettled([...retiringProfiles])
+      await Promise.allSettled(projections)
+      await managedRuntime?.close()
+      await managedAuth?.close()
+    })
+  }, '@zaimokuza/dsh-acp-adapter: drain profile routes and projections before dependencies')
+
+  const refreshConfig = (): void => {
+    if (disposed) return
+    agents = structuredClone(config.agents.get())
+    onSettingsChange()
+  }
+  refreshConfig()
+  ready.resolve()
+  ctx.on('loader/volatile-update', refreshConfig)
+
+  return {
+    ready: ready.promise,
+    agents: () => new Map(Object.entries(agents)),
+    resolveRoute(provider: string): AcpResolvedAgent | undefined {
+      const id = acpAgentIdFromRoute(provider)
+      if (id === undefined) return undefined
+      const config = activeAgents[id]
+      if (config === undefined) return undefined
+      // 运行时身份由消费方经 effectiveRuntimeOf(id, config) 解析
+      // （runtime 字段优先、id 回退），不随解析结果复制一份
+      return { id, config }
+    },
+  }
+}

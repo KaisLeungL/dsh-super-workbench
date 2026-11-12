@@ -1,0 +1,5 @@
+- id: ui-schedule
+  disabled: true
+- insert:
+    - id: quick-actions-schedule-ui
+      name: '@local/dsh-quick-actions-schedule-ui'

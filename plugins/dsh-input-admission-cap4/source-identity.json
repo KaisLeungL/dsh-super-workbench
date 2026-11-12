@@ -1,0 +1,28 @@
+{
+  "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
+  "baseCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+  "kind": "local-source-built-candidate",
+  "upstreamPublished": false,
+  "records": [
+    {
+      "path": "packages/core/agent-loop/src/agent.ts",
+      "bytes": 33928,
+      "sha256": "0b98a7fd3685834104fe95844abc779d9b76e5c341ba2c386db8f9769f505e62"
+    },
+    {
+      "path": "packages/core/agent-loop/src/index.ts",
+      "bytes": 36724,
+      "sha256": "5368b47b98c7e9e868dc993c41a551bb78a652480187613ae0b102ce82a4a4f8"
+    },
+    {
+      "path": "packages/core/agent/src/runtime-types.ts",
+      "bytes": 23956,
+      "sha256": "87edf52a36a1ea3553f5f0346cf907e357ddfb39329d27ab40839ce35aa94d05"
+    },
+    {
+      "path": "packages/core/agent-loop/lib/index.js",
+      "bytes": 68899,
+      "sha256": "f4c2366ea27b092f0f830293e604fc11fa48a7c78fb6a97b28138348c115780a"
+    }
+  ]
+}

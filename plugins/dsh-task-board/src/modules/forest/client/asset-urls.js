@@ -1,0 +1,25 @@
+import island from './assets/island.png?inline';
+import grid from './assets/grid-overlay.png?inline';
+import broadleaf from './assets/tree-broadleaf.png?inline';
+import conifer from './assets/tree-conifer.png?inline';
+import sakura from './assets/tree-sakura.png?inline';
+import maple from './assets/tree-maple.png?inline';
+import ginkgo from './assets/tree-ginkgo.png?inline';
+import birch from './assets/tree-birch.png?inline';
+import willow from './assets/tree-willow.png?inline';
+import redwood from './assets/tree-redwood.png?inline';
+import cedar from './assets/tree-cedar.png?inline';
+import cypress from './assets/tree-cypress.png?inline';
+import baobab from './assets/tree-baobab.png?inline';
+import palm from './assets/tree-palm.png?inline';
+import bamboo from './assets/tree-bamboo.png?inline';
+import magnolia from './assets/tree-magnolia.png?inline';
+import jacaranda from './assets/tree-jacaranda.png?inline';
+import orange from './assets/tree-orange.png?inline';
+import apple from './assets/tree-apple.png?inline';
+import olive from './assets/tree-olive.png?inline';
+import acacia from './assets/tree-acacia.png?inline';
+import dragonblood from './assets/tree-dragonblood.png?inline';
+
+export { island, grid };
+export const treeImages = { broadleaf, conifer, sakura, maple, ginkgo, birch, willow, redwood, cedar, cypress, baobab, palm, bamboo, magnolia, jacaranda, orange, apple, olive, acacia, dragonblood };

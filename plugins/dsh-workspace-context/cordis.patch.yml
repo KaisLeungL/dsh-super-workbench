@@ -1,0 +1,7 @@
+- insert:
+    - id: workspace-context
+      name: '@local/dsh-workspace-context'
+    - id: workspace-context-task-board
+      name: '@local/dsh-workspace-context/task-board'
+    - id: workspace-context-schedule
+      name: '@local/dsh-workspace-context/schedule'

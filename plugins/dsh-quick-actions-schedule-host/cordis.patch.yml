@@ -1,0 +1,5 @@
+- id: schedule
+  disabled: true
+- insert:
+    - id: quick-actions-schedule-host
+      name: '@local/dsh-quick-actions-schedule-host'

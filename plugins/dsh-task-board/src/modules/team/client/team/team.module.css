@@ -1,0 +1,193 @@
+/* Team provider seats: tokens only.
+ *
+ * The settings block's chrome, rows and inputs belong to the shared family card
+ * slice (`settings-card.module.css`, generated); this file owns the detail
+ * block's own lines, the settings row controls the shared slice has no class for
+ * (the status word, the group headings and the action row) and the badge.
+ */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  margin: 0;
+}
+
+/* One label/value line: the label column sizes to its own text, so a long value
+   wraps inside the remaining width instead of squeezing the label into a
+   character-per-line column. */
+.row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.label {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.value {
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* A status word that keeps its own line beside a label, never wrapping into it. */
+.status {
+  flex: none;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--dsw-alias-border-secondary);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+.badge[data-hub-status='in_review'] {
+  border-color: var(--dsw-alias-border-primary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.badge[data-hub-status='running'] {
+  border-color: var(--dsw-alias-border-primary);
+}
+
+.badge[data-hub-status='failed'] {
+  border-style: dashed;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+  border-top: 1px solid var(--dsw-alias-border-secondary);
+}
+
+.meta {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+.body {
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  color: var(--dsw-alias-label-secondary);
+  border-left: 2px solid var(--dsw-alias-border-primary);
+  padding-left: 6px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* A heading inside the card body that groups the rows under it. */
+.groupTitle {
+  margin: 18px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The card's own action row, under the form it commits. */
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 16px 0 4px;
+}
+
+/* The row's committing action: the primary-action token trio, so it stays
+   legible in every theme and under skins. Never brand-primary as a fill. */
+.primaryButton {
+  padding: 4px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--dsw-alias-button-primary-fill, var(--dsw-alias-label-primary));
+  color: var(--dsw-alias-label-primary-foreground, var(--dsw-alias-bg-layer-3));
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--dsw-alias-button-primary-hover, var(--dsw-alias-button-primary-fill, var(--dsw-alias-label-primary)));
+}
+
+.primaryButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+
+/* A secondary action of the same row: the card surface with a hairline. */
+.button {
+  padding: 4px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+
+.primaryButton:disabled,
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.saved {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.empty {
+  color: var(--dsw-alias-label-secondary);
+  padding-top: 12px;
+  margin: 0;
+}

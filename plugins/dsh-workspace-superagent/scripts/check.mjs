@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {readFileSync,existsSync,mkdirSync,writeFileSync} from 'node:fs';
+import {resolve,dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {createHash,randomUUID} from 'node:crypto';
+import vm from 'node:vm';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),read=p=>readFileSync(root+'/'+p,'utf8'),pkg=JSON.parse(read('package.json'));
+const checks=[];function check(name,ok){assert.ok(ok,name);checks.push({name,passed:true});}
+check('精确版本',Object.values(pkg.devDependencies).every(v=>/^\d+\.\d+\.\d+(?:-[\w.]+)?$/.test(v)));
+for(const p of ['lib/index.js','lib/client.js','lib/types/index.d.ts','lib/types/client/index.d.ts','cordis.patch.yml','locale/zh.json','locale/en.json',pkg.icon])check('产物存在 '+p,existsSync(root+'/'+p));
+const zh=JSON.parse(read('locale/zh.json')),en=JSON.parse(read('locale/en.json'));
+check('双语元数据',!!zh.meta.title&&!!zh.meta.description&&!!en.meta.title&&!!en.meta.description);
+check('双语键一致',JSON.stringify(Object.keys(zh.ui).sort())===JSON.stringify(Object.keys(en.ui).sort()));
+const icon=read('icon.svg');check('原创内联 SVG',icon.includes('<svg')&&!/<(?:script|image)|href=|https?:\/\//.test(icon.replace('http://www.w3.org/2000/svg',''))&&Buffer.byteLength(icon)<262144);
+const client=read('lib/client.js');let moduleRecord;vm.runInNewContext(client,{window:{__ModuleLoader__:{load(record){moduleRecord=record;}}}});
+check('ModuleLoader ID',moduleRecord?.id===pkg.name);
+const requires=[];const exports=moduleRecord.factory(name=>{requires.push(name);if(name==='react')return createRequire(import.meta.url)('react');throw Error('非法浏览器导入 '+name);});
+check('只引用宿主 React',requires.length===1&&requires[0]==='react'&&typeof exports.apply==='function');
+check('无 Chat 复制或业务操作',!client.includes('sessionController')&&!client.includes('createSession')&&!client.includes('runTask'));
+check('类型声明无失效 JSON 路径',!read('lib/types/client/index.d.ts').includes('../../locale'));
+const hashes=Object.fromEntries(['package.json','cordis.patch.yml','lib/index.js','lib/client.js','locale/zh.json','locale/en.json','icon.svg','sdk-lock.json'].map(p=>[p,createHash('sha256').update(readFileSync(root+'/'+p)).digest('hex')]));
+const dir=resolve(root,'../../.superagent-product-lab/b04-deployment/check-'+randomUUID());mkdirSync(dir,{recursive:true});writeFileSync(dir+'/manifest-check.json',JSON.stringify({version:pkg.version,checks,hashes},null,2)+'\n');console.log(JSON.stringify({checks:checks.length,passed:true,hashes}));

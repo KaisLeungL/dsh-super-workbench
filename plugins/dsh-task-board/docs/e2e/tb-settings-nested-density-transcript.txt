@@ -1,0 +1,74 @@
+Task-board settings card nested density - GUI verification transcript
+==========================================================================
+
+Date: 2026-10-21 (Asia/Shanghai)
+Build: packages/*/lib rebuilt from this working tree (pnpm build); the settings
+       card renders from packages/dsh-task-board/lib/client.js.
+
+What this record covers
+-----------------------
+The board's settings card renders five nested topic cards inside one hosting
+card. This capture measures the shipped presentation: the nested density, the
+one-line hint with its full sentence on the hover title, the two reversible
+disclosure legs, and the power facts rendered as a two-column definition list.
+
+Method
+------
+The user's running desktop host cannot be driven without its per-boot browser
+token, so the capture boots an ISOLATED host instead of touching it:
+
+  1. scratch home with a copy of the web profile:
+       mkdir -p /tmp/dsh-verify-settings-card/profiles
+       cp -a ~/.dsh/profiles/web /tmp/dsh-verify-settings-card/profiles/web
+       ln -s ~/.dsh/profiles/node_modules /tmp/dsh-verify-settings-card/profiles/node_modules
+  2. DSH_HOME=/tmp/dsh-verify-settings-card dsh --profile web --port 19400 --no-open
+     -> dsh web: http://127.0.0.1:19400/?token=<redacted>
+  3. Playwright from the repository devDependencies, channel 'chrome' (the local
+     Google Chrome), driving the printed URL: open Settings -> Web plug-ins,
+     expand the task-board card, then the topic cards.
+
+The scratch home carried a fresh ledger (revision 0, its own ledgerId) and was
+deleted afterwards; the user's host kept listening on its own port throughout.
+
+Measurements (1440x1000, devicePixelRatio 1, computed values read in the page)
+-----------------------------------------------------------------------------
+Hosting card title            15px / 600      topic card title       13px / 600
+Hosting card header           76.50px         topic card header      60.19px
+Hosting card radius           12px            topic card radius      10px
+Hosting card body inset       16px            topic card body inset  12px
+Topic description             12px, one line (lineCount 1, 18px box)
+Power facts                   4 dt at one x, 4 dd at one x, grid "60px 454px"
+
+The three viewports agree on every value above: 1440x1000, 768x1024, and
+1440x1000 with 200 percent zoom (720x500 CSS pixels, dpr 2).
+
+Disclosure motion
+-----------------
+target height 116.50px, transition-property "grid-template-rows, opacity",
+duration 0.18s, timing ease.
+
+  expand   9.00px at 6ms  -> 88.94px at 91ms  -> 116.50px at 201ms
+  collapse 116.50px at 6ms -> 27.55px at 91ms  -> node removed at 186ms
+                                              (still mounted, 9px, at 181ms)
+
+With prefers-reduced-motion: reduce the height leg drops out (transition-property
+is opacity alone) and the body still reaches its full height, so the card opens
+and closes normally.
+
+State stability
+---------------
+Flipping one switch adds the unsaved badge. Every measured rectangle on both the
+hosting and the topic cards keeps dx = dy = 0; only the header text block narrows
+by 62px to give way to the badge, so nothing shifts.
+
+Findings worth keeping
+----------------------
+- The one-line description clamp is armed (nowrap, hidden, ellipsis) but does not
+  truncate current copy: the longest description measures 349.5px against 350px
+  of available width at 1440x1000, and every tested width down to 320px still
+  fits. When it does truncate, the header's title attribute carries the whole
+  sentence.
+- jsdom cannot prove any of the geometry above, and the hover tooltip itself was
+  not screenshotted: the capture compares the title attribute against the visible
+  text rather than photographing a native tooltip.
+- The measured header height is a CSS-pixel box height, not a touch hit test.

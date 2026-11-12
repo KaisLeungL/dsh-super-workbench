@@ -1,0 +1,77 @@
+{
+  "kind": "local-sdk-snapshot",
+  "records": [
+    {
+      "name": "@deepseek-ai/cordis",
+      "version": "4.1.0",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/@deepseek-ai+cordis@4.1.0_@deepseek-ai+cordis-plugin-loader@1.1.0/node_modules/@deepseek-ai/cordis/package.json",
+      "sha256": "70be1056619663339433309474b1e6a2307088097af3cb082afe4b5ca2021b26"
+    },
+    {
+      "name": "@deepseek-ai/dsh-client-connection",
+      "version": "0.2.2-rc.1",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/@deepseek-ai+dsh-client-connection@0.2.2-rc.1_@deepseek-ai+cordis@4.1.0_@deepseek-ai+ds_4a3f814cf1661b340f141c810789eb2e/node_modules/@deepseek-ai/dsh-client-connection/package.json",
+      "sha256": "cb3c6005e57364222419b904e7ef1537d50d19905e1c7402927d75cff6d961a5"
+    },
+    {
+      "name": "@deepseek-ai/dsh-client-locale",
+      "version": "0.2.2-rc.1",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/@deepseek-ai+dsh-client-locale@0.2.2-rc.1_@deepseek-ai+cordis@4.1.0/node_modules/@deepseek-ai/dsh-client-locale/package.json",
+      "sha256": "ccffb36d65e08bc79977677933fbd22236790766f0d18810423c6d1743756e86"
+    },
+    {
+      "name": "@deepseek-ai/dsh-client-ui-layout",
+      "version": "0.2.2-rc.1",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/@deepseek-ai+dsh-client-ui-layout@0.2.2-rc.1_@deepseek-ai+cordis@4.1.0/node_modules/@deepseek-ai/dsh-client-ui-layout/package.json",
+      "sha256": "4e10b528cf0153572210239c8535cebc241471c2fd6a309737994f8fd1a5a90a"
+    },
+    {
+      "name": "@deepseek-ai/dsh-client-ui-sidebar",
+      "version": "0.2.2-rc.1",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/@deepseek-ai+dsh-client-ui-sidebar@0.2.2-rc.1_@deepseek-ai+cordis@4.1.0/node_modules/@deepseek-ai/dsh-client-ui-sidebar/package.json",
+      "sha256": "42e506a9b02153231563670e9b68a314c7e2a5bfa0f802cba52de633bf78d880"
+    },
+    {
+      "name": "@deepseek-ai/dsh-client-ui-renderer",
+      "version": "0.2.2-rc.1",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/@deepseek-ai+dsh-client-ui-renderer@0.2.2-rc.1_@deepseek-ai+cordis@4.1.0/node_modules/@deepseek-ai/dsh-client-ui-renderer/package.json",
+      "sha256": "428e19d096431fb134602ff14086f5fd5d6eefc84adac0976a6230a2fb8bf155"
+    },
+    {
+      "name": "@deepseek-ai/dsh-client-ui-slots",
+      "version": "0.2.2-rc.1",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/@deepseek-ai+dsh-client-ui-slots@0.2.2-rc.1_@deepseek-ai+cordis@4.1.0/node_modules/@deepseek-ai/dsh-client-ui-slots/package.json",
+      "sha256": "b4e0cd2a0d20d9308c15d0647d556c748401e0952e22044a93be6407f7678f54"
+    },
+    {
+      "name": "@types/node",
+      "version": "22.20.5",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/@types+node@22.20.5/node_modules/@types/node/package.json",
+      "sha256": "234e64edc31580d6052f8abc89b96f156de29d3b4c7121214b960dec09bd2a25"
+    },
+    {
+      "name": "@types/react",
+      "version": "18.3.31",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/@types+react@18.3.31/node_modules/@types/react/package.json",
+      "sha256": "7b5d39d90592ab340d44fecbf8d03afc0a0a197f3217259c3bb9ac881ff67a06"
+    },
+    {
+      "name": "react",
+      "version": "18.3.1",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/react@18.3.1/node_modules/react/package.json",
+      "sha256": "d4e68a5c96babb20cad1daafea8b78822eae45b341552cf5418d06a5304fa64c"
+    },
+    {
+      "name": "typescript",
+      "version": "5.7.3",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/typescript@5.7.3/node_modules/typescript/package.json",
+      "sha256": "1e03325943793f3bf11667b94fca412fe5ba617c85b84c16f0474933da156baa"
+    },
+    {
+      "name": "tsdown",
+      "version": "0.22.2",
+      "manifest": "/Users/kaisleung/Documents/deepseek-harness/default-workspace/dsh-web/node_modules/.pnpm/tsdown@0.22.2_@typescript+native-preview@7.0.0-dev.20260707.2_typescript@5.7.3/node_modules/tsdown/package.json",
+      "sha256": "6325a4c40333613429a8b8064d53781f7d473399bcafb64bff8c6e7ebead460a"
+    }
+  ]
+}

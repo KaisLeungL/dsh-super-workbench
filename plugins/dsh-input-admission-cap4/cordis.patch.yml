@@ -1,0 +1,8 @@
+- id: agent-loop
+  disabled: true
+- insert:
+    - id: input-admission-cap4
+      name: '@local/dsh-input-admission-cap4'
+      config:
+        agents: []
+        maxParallelToolCalls: 10

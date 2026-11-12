@@ -1,0 +1,83 @@
+{
+  "name": "@local/dsh-workspace-superagent",
+  "version": "0.1.0-b04.30",
+  "description": "工作区主理原生会话与会话快捷操作；看板与定时任务由已认证用户确认后创建。",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "icon": "icon.svg",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./preset": {
+      "types": "./lib/types/sessions/preset.d.ts",
+      "default": "./lib/preset.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./locale/zh.json": "./locale/zh.json",
+    "./locale/en.json": "./locale/en.json",
+    "./icon.svg": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "skills",
+    "icon.svg",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "engines": {
+      "dsh": "=0.2.2-rc.1"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-model-selection",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": "=0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.1",
+    "react": "18.3.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-client-connection": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-locale": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-layout": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-sidebar": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.1",
+    "@types/node": "22.20.5",
+    "@types/react": "18.3.31",
+    "react": "18.3.1",
+    "typescript": "5.7.3",
+    "tsdown": "0.22.2"
+  },
+  "scripts": {
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check.mjs"
+  }
+}

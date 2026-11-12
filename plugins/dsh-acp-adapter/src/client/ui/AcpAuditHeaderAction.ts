@@ -1,0 +1,664 @@
+/** Agent 管理中选定会话的 ACP 诊断详情。 */
+import { createElement as h, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import {
+  IconCloseOutlineMedium,
+  IconSearchOutlineMedium,
+  Input,
+  JsonTree,
+  Tag,
+  Button,
+  writeClipboard,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+import type { TagTone } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { AcpAuditSummaryCode, AcpAuditTimelineEntry } from '../data/acp-remote.ts'
+import type { AcpRemoteLike } from '../data/acp-remote.ts'
+import type { AcpLocaleKey } from './locales.ts'
+import type { AcpDiagnosticView, AcpRecoveryView } from '../../contract/remote.ts'
+import { matchesDiagnosticView } from '../../contract/diagnostics.ts'
+import {
+  AcpSupportExportError,
+  collectAcpSupportExport,
+  downloadAcpSupportExport,
+  type AcpSupportExport,
+} from '../data/acp-support-export.ts'
+import { recoveryText } from './AcpRecoveryDock.ts'
+import css from './AcpAuditHeaderAction.module.css'
+import { acpJsonTreeLabels, type AcpJsonStringWrapping } from './json-tree.ts'
+declare const __DSH_ACP_ADAPTER_VERSION__: string
+
+type Translate = (key: AcpLocaleKey, params?: Record<string, string | number>) => string
+type Filter = AcpDiagnosticView
+
+export interface AcpAuditViewProps extends Pick<ConvViewProps, 'sessionId'> {
+  remote?: AcpRemoteLike
+  t?: Translate
+  jsonStringWrapping?: AcpJsonStringWrapping
+}
+
+type LoadedAcpAuditViewProps = Omit<AcpAuditViewProps, 't'> & { readonly t: Translate }
+
+export function auditEntryMatchesFilter(entry: AcpAuditTimelineEntry, filter: Filter): boolean {
+  return matchesDiagnosticView(entry, filter)
+}
+
+/** Search only user-meaningful audit facts; compact raw JSON stays in details. */
+export function auditEntryMatchesQuery(t: Translate, entry: AcpAuditTimelineEntry, query: string): boolean {
+  const normalized = query.trim().toLocaleLowerCase()
+  if (normalized === '') return true
+  return [
+    categoryLabel(t, entry.category),
+    auditSummaryOf(t, entry),
+    entry.subject ?? '',
+    entry.status ?? '',
+    auditRecordedCause(entry) ?? '',
+  ].some((value) => value.toLocaleLowerCase().includes(normalized))
+}
+
+/** Display only explicit recorded reasons, never infer a cause from an outcome. */
+export function auditRecordedCause(entry: AcpAuditTimelineEntry): string | null {
+  if (entry.detail === null) return null
+  try {
+    const value = JSON.parse(entry.detail) as {
+      reason?: unknown
+      detail?: unknown
+      cause?: unknown
+      note?: unknown
+      items?: unknown
+    } | null
+    const reason = [value?.reason, value?.detail, value?.cause, value?.note].find(
+      (candidate): candidate is string => typeof candidate === 'string' && candidate.trim() !== '',
+    )
+    if (reason !== undefined) return reason
+    if (Array.isArray(value?.items)) {
+      const reasons = value.items.flatMap((item: unknown) => {
+        if (typeof item !== 'object' || item === null || !('reason' in item)) return []
+        return typeof item.reason === 'string' && item.reason.trim() !== '' ? [item.reason] : []
+      })
+      return reasons.length === 0 ? null : [...new Set(reasons)].join('\n')
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+const summaryKeys: Record<AcpAuditSummaryCode, AcpLocaleKey> = {
+  'binding.established': 'auditSummaryBinding',
+  'permission.asked': 'auditSummaryPermissionAsked',
+  'permission.bridge': 'auditSummaryPermissionBridge',
+  'permission.decided': 'auditSummaryPermissionDecided',
+  'reconciliation.required': 'auditSummaryReconciliation',
+  'replay.matched': 'auditSummaryReplayMatched',
+  'replay.different': 'auditSummaryReplayDifferent',
+  'replay.overflow': 'auditSummaryReplayOverflow',
+  'replay.not-compared': 'auditSummaryReplayNotCompared',
+  'restore.reused': 'auditSummaryRestoreReused',
+  'restore.resumed': 'auditSummaryRestoreResumed',
+  'restore.loaded': 'auditSummaryRestoreLoaded',
+  'replay.unavailable': 'auditSummaryReplayUnavailable',
+  'degradation.recorded': 'auditSummaryDegradation',
+  'filesystem.operation': 'auditSummaryFilesystem',
+  'filesystem.read': 'auditSummaryRead',
+  'filesystem.write': 'auditSummaryWrite',
+  'terminal.operation': 'auditSummaryTerminal',
+  'session-fork.completed': 'auditSummarySessionFork',
+  'agent.event': 'auditSummaryAgentEvent',
+}
+
+export function auditSummaryOf(t: Translate, entry: AcpAuditTimelineEntry): string {
+  const base = t(summaryKeys[entry.summaryCode])
+  const subject =
+    entry.subject !== null && entry.summaryCode === 'session-fork.completed'
+      ? auditStatusOf(t, entry.subject)
+      : entry.subject
+  const status = entry.status === null ? null : auditStatusOf(t, entry.status)
+  return [base, subject, status].filter((value): value is string => value !== null && value !== '').join(' · ')
+}
+
+function auditStatusOf(t: Translate, status: string): string {
+  const key: Partial<Record<string, AcpLocaleKey>> = {
+    'auto-approved': 'auditAutoApproved',
+    'approval-required': 'auditApprovalRequired',
+    'policy-unavailable': 'auditPolicyUnavailable',
+    'bridge-unavailable': 'auditBridgeUnavailable',
+    'inactive-connection': 'auditBridgeInactive',
+    'inactive-prompt': 'auditPromptInactive',
+    'identity-unmatched': 'auditIdentityUnmatched',
+    'invalid-tool-name': 'auditInvalidToolName',
+    'not-coordination': 'auditNotCoordination',
+    'allow-once-unavailable': 'auditAllowOnceMissing',
+    'danger-full-access': 'auditStatusNativeAccess',
+    set_config_option: 'auditStatusConfigSync',
+    'session-setup': 'auditStatusSessionSetup',
+    ok: 'auditStatusOk',
+    error: 'auditStatusError',
+    aborted: 'auditStatusAborted',
+    timeout: 'auditStatusTimeout',
+    'concurrent-change': 'auditStatusConcurrentChange',
+    selected: 'auditStatusSelected',
+    cancelled: 'auditStatusCancelled',
+    started: 'auditStatusStarted',
+    running: 'auditStatusRunning',
+    exited: 'auditStatusExited',
+    killed: 'auditStatusKilled',
+    released: 'auditStatusReleased',
+    'output-summary': 'auditStatusOutputSummary',
+    'stop-requested': 'auditStatusStopRequested',
+    'exit-unverified': 'auditStatusExitUnverified',
+    allow_once: 'auditAllowOnce',
+    allow_always: 'auditAllowAlways',
+    reject_once: 'auditRejectOnce',
+    reject_always: 'auditRejectAlways',
+    inherited: 'auditForkInherited',
+    blank: 'auditForkBlank',
+    'agent-does-not-advertise-fork': 'auditForkUnsupported',
+    'parent-not-idle': 'auditForkParentNotIdle',
+    'parent-recovery-required': 'auditForkParentRecoveryRequired',
+    'parent-binding-unavailable': 'auditForkParentUnavailable',
+    'parent-binding-mismatch': 'auditForkParentMismatch',
+    'seed-not-latest-semantic-boundary': 'auditForkOlderBoundary',
+    'candidate-not-available': 'auditForkCandidateUnavailable',
+  }
+  const localeKey = key[status]
+  return localeKey === undefined ? status : t(localeKey)
+}
+
+function categoryLabel(t: Translate, category: AcpAuditTimelineEntry['category']): string {
+  const key: Record<AcpAuditTimelineEntry['category'], AcpLocaleKey> = {
+    recovery: 'auditCategoryRecovery',
+    permission: 'auditCategoryPermission',
+    agent: 'auditCategoryAgent',
+    files: 'auditCategoryFiles',
+  }
+  return t(key[category])
+}
+
+function entryTone(entry: AcpAuditTimelineEntry): TagTone {
+  return entry.severity === 'info' ? 'neutral' : entry.severity === 'error' ? 'danger' : 'warning'
+}
+
+function timeOf(epoch: number): string {
+  try {
+    return new Date(epoch).toLocaleString()
+  } catch {
+    return String(epoch)
+  }
+}
+
+type AuditDetail =
+  { readonly kind: 'json'; readonly value: object | unknown[] } | { readonly kind: 'text'; readonly value: string }
+
+/** Parse structured records into DSH's native JSON inspector; preserve non-JSON text verbatim. */
+function auditDetailOf(detail: string): AuditDetail {
+  try {
+    const value: unknown = JSON.parse(detail)
+    if (typeof value === 'object' && value !== null) return { kind: 'json', value }
+  } catch {
+    /* Non-JSON records use the text fallback below. */
+  }
+  return { kind: 'text', value: detail }
+}
+
+/** 筛选、记录详情与脱敏导出均在管理页面内完成。 */
+function AcpAuditView(props: AcpAuditViewProps): ReactNode {
+  if (props.t === undefined) return null
+  return h(AcpAuditLoadedView, { ...props, t: props.t })
+}
+
+function AcpAuditLoadedView(props: LoadedAcpAuditViewProps): ReactNode {
+  const { sessionId, remote, t, jsonStringWrapping } = props
+  const [loading, setLoading] = useState(false)
+  const [entries, setEntries] = useState<readonly AcpAuditTimelineEntry[]>([])
+  const [cursor, setCursor] = useState<number | null>(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<Filter>('issues')
+  const [recovery, setRecovery] = useState<AcpRecoveryView | null>(null)
+  const [recoveryUnavailable, setRecoveryUnavailable] = useState(false)
+  const [query, setQuery] = useState('')
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const [exportState, setExportState] = useState<'idle' | 'loading' | 'downloaded' | 'failed'>('idle')
+  const [supportExport, setSupportExport] = useState<AcpSupportExport | null>(null)
+  const [exportError, setExportError] = useState<'unavailable' | 'invalid-page' | 'session-changed' | null>(null)
+  const exportEpoch = useRef(0)
+  const exportLoading = useRef(false)
+  const exportController = useRef<AbortController | undefined>(undefined)
+  const currentSessionId = useRef(sessionId)
+  currentSessionId.current = sessionId
+  const copyEpoch = useRef(0)
+  const [selectedSeq, setSelectedSeq] = useState<number | null>(null)
+  const requestEpoch = useRef(0)
+  const recoveryEpoch = useRef(0)
+  const loadingRef = useRef(false)
+
+  const load = useCallback(
+    (reset: boolean): void => {
+      if (sessionId === undefined || remote === undefined || loadingRef.current) return
+      requestEpoch.current += 1
+      const epoch = requestEpoch.current
+      loadingRef.current = true
+      setLoading(true)
+      setError(null)
+      const afterSeq = reset ? 0 : (cursor ?? 0)
+      if (reset) {
+        const statusEpoch = ++recoveryEpoch.current
+        void remote
+          .recoverySnapshot(sessionId)
+          .then((result) => {
+            if (statusEpoch !== recoveryEpoch.current) return
+            setRecoveryUnavailable(!result.ok)
+            setRecovery(result.ok && result.value.kind !== 'healthy' ? result.value : null)
+          })
+          .catch(() => {
+            if (statusEpoch === recoveryEpoch.current) {
+              setRecoveryUnavailable(true)
+              setRecovery(null)
+            }
+          })
+      }
+      void remote
+        .auditTimeline(sessionId, { afterSeq, limit: 50, view: filter })
+        .then((result) => {
+          if (epoch !== requestEpoch.current) return
+          if (!result.ok) {
+            setError(t('auditUnavailable'))
+            return
+          }
+          setEntries((previous) => (reset ? result.value.entries : [...previous, ...result.value.entries]))
+          setCursor(result.value.nextCursor)
+          setHasMore(result.value.hasMore)
+        })
+        .catch(() => {
+          if (epoch === requestEpoch.current) setError(t('auditUnavailable'))
+        })
+        .finally(() => {
+          if (epoch === requestEpoch.current) {
+            loadingRef.current = false
+            setLoading(false)
+          }
+        })
+    },
+    [sessionId, remote, cursor, t, filter],
+  )
+
+  useEffect(() => {
+    exportEpoch.current += 1
+    exportLoading.current = false
+    setExportState('idle')
+    setSupportExport(null)
+    setExportError(null)
+    setFilter('issues')
+    return () => {
+      exportEpoch.current += 1
+      exportController.current?.abort()
+      exportController.current = undefined
+    }
+  }, [sessionId, remote])
+
+  useEffect(() => {
+    requestEpoch.current += 1
+    loadingRef.current = false
+    setEntries([])
+    setCursor(0)
+    setHasMore(false)
+    setError(null)
+    setRecovery(null)
+    setRecoveryUnavailable(false)
+    setQuery('')
+    setSelectedSeq(null)
+    load(true)
+    return () => {
+      requestEpoch.current += 1
+      recoveryEpoch.current += 1
+    }
+    // `load` changes with paging state; reset belongs only to a new binding.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, remote, filter])
+
+  const visible = useMemo(
+    () => entries.filter((entry) => auditEntryMatchesFilter(entry, filter) && auditEntryMatchesQuery(t, entry, query)),
+    [entries, filter, query, t],
+  )
+  const selected = useMemo(() => entries.find((entry) => entry.seq === selectedSeq) ?? null, [entries, selectedSeq])
+  useEffect(() => {
+    ++copyEpoch.current
+    setCopyState('idle')
+    return () => {
+      ++copyEpoch.current
+    }
+  }, [sessionId, selectedSeq])
+  const copySelected = async (): Promise<void> => {
+    if (selected === null) return
+    const generation = copyEpoch.current
+    try {
+      const copied = await writeClipboard(
+        JSON.stringify({ adapterVersion: __DSH_ACP_ADAPTER_VERSION__, sessionId, record: selected }, null, 2),
+      )
+      if (generation === copyEpoch.current) setCopyState(copied ? 'copied' : 'failed')
+    } catch {
+      if (generation === copyEpoch.current) setCopyState('failed')
+    }
+  }
+  const startSupportExport = async (): Promise<void> => {
+    if (sessionId === undefined || remote === undefined || exportLoading.current) return
+    const epoch = ++exportEpoch.current
+    const selectedSession = sessionId
+    const controller = new AbortController()
+    exportController.current = controller
+    exportLoading.current = true
+    setExportState('loading')
+    setSupportExport(null)
+    setExportError(null)
+    try {
+      const result = await collectAcpSupportExport(
+        remote,
+        selectedSession,
+        __DSH_ACP_ADAPTER_VERSION__,
+        () =>
+          exportEpoch.current === epoch && currentSessionId.current === selectedSession && !controller.signal.aborted,
+        Date.now,
+        controller.signal,
+      )
+      if (exportEpoch.current !== epoch || currentSessionId.current !== selectedSession || controller.signal.aborted)
+        return
+      downloadAcpSupportExport(result)
+      setSupportExport(result)
+      setExportState('downloaded')
+    } catch (error: unknown) {
+      if (exportEpoch.current !== epoch || currentSessionId.current !== selectedSession || controller.signal.aborted)
+        return
+      setExportError(error instanceof AcpSupportExportError ? error.code : 'unavailable')
+      setExportState('failed')
+    } finally {
+      if (exportController.current === controller) exportController.current = undefined
+      if (exportEpoch.current === epoch) exportLoading.current = false
+    }
+  }
+  const labels: readonly [Filter, AcpLocaleKey][] = [
+    ['issues', 'auditIssues'],
+    ['operations', 'auditOperations'],
+    ['technical', 'auditTechnical'],
+  ]
+  return h(
+    'section',
+    {
+      className: css.root,
+      'data-acp-diagnostics': sessionId,
+      'aria-label': t('auditTitle'),
+    },
+    h(
+      'div',
+      { className: css.toolbar, role: 'toolbar', 'aria-label': t('auditTitle') },
+      h(
+        'div',
+        { className: css.toolbarInner },
+        h(
+          'div',
+          { className: css.filters },
+          ...labels.map(([value, key]) =>
+            h(
+              'button',
+              {
+                key: value,
+                type: 'button',
+                className: value === filter ? css.filterActive : css.filter,
+                'aria-pressed': value === filter,
+                onClick: () => setFilter(value),
+              },
+              t(key),
+            ),
+          ),
+        ),
+        h(
+          'div',
+          { className: css.toolbarEnd },
+          h(
+            'button',
+            { type: 'button', className: css.refresh, disabled: loading, onClick: () => load(true) },
+            t(loading ? 'auditLoadingShort' : 'auditRefresh'),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: css.refresh,
+              disabled: sessionId === undefined || remote === undefined || exportState === 'loading',
+              onClick: () => void startSupportExport(),
+            },
+            t('auditExport'),
+          ),
+          h(Input, {
+            icon: h(IconSearchOutlineMedium, { size: 16 }),
+            type: 'search',
+            className: css.search!,
+            value: query,
+            placeholder: t('auditSearchPlaceholder'),
+            'aria-label': t('auditSearch'),
+            onChange: (event: { currentTarget: { value: string } }) => setQuery(event.currentTarget.value),
+          }),
+        ),
+      ),
+    ),
+    h(
+      'div',
+      { className: css.split },
+      h(
+        'div',
+        { className: css.tablePane, 'data-audit-scroll': true },
+        h('p', { className: css.muted }, t('auditScope')),
+        recoveryUnavailable ? h('p', { className: css.error, role: 'alert' }, t('auditRecoveryUnavailable')) : null,
+        recovery === null
+          ? null
+          : h(
+              'div',
+              { className: css.currentIssue, role: 'status' },
+              h('strong', null, t('auditCurrentState')),
+              h(
+                'p',
+                null,
+                recoveryText((key) => t(key), recovery),
+              ),
+              h('p', null, t('auditRecoveryAction')),
+              h(
+                'details',
+                null,
+                h('summary', null, t('auditTechnical')),
+                h('pre', { className: css.detailPayload }, recovery.detail ?? recovery.cause ?? t('auditNoCause')),
+              ),
+            ),
+        loading && entries.length === 0 ? h('p', { className: css.muted }, t('auditLoading')) : null,
+        error === null ? null : h('p', { className: css.error, role: 'alert' }, error),
+        !loading && error === null && visible.length === 0
+          ? h(
+              'p',
+              { className: css.muted },
+              query.trim() !== ''
+                ? t('auditNoMatch')
+                : hasMore
+                  ? t('auditScanMore')
+                  : filter === 'issues'
+                    ? t('auditNoIssues')
+                    : t('auditEmpty'),
+            )
+          : null,
+        h(
+          'table',
+          { className: css.table, 'aria-label': t('auditTimeline') },
+          h('colgroup', null, h('col', { className: css.eventColumn }), h('col', { className: css.contentColumn })),
+          h(
+            'tbody',
+            null,
+            ...visible.map((entry) => {
+              const isSelected = entry.seq === selectedSeq
+              const select = (): void => setSelectedSeq(isSelected ? null : entry.seq)
+              return h(
+                'tr',
+                {
+                  key: `${entry.seq}-${entry.kind}`,
+                  tabIndex: 0,
+                  'data-selected': isSelected || undefined,
+                  'aria-selected': isSelected,
+                  onClick: select,
+                  onKeyDown: (event: { key: string; preventDefault(): void }) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return
+                    event.preventDefault()
+                    select()
+                  },
+                },
+                h(
+                  'td',
+                  { className: css.event },
+                  h(
+                    'div',
+                    { className: css.eventInner },
+                    h(
+                      'div',
+                      { className: css.kindSlot },
+                      h(Tag, { tone: entryTone(entry) }, categoryLabel(t, entry.category)),
+                    ),
+                  ),
+                ),
+                h(
+                  'td',
+                  { className: css.content },
+                  h(
+                    'div',
+                    { className: css.contentInner },
+                    h('span', { className: css.summary }, auditSummaryOf(t, entry)),
+                    h(
+                      'time',
+                      { className: css.time, dateTime: new Date(entry.time).toISOString() },
+                      timeOf(entry.time),
+                    ),
+                  ),
+                ),
+              )
+            }),
+          ),
+        ),
+        hasMore
+          ? h(
+              'button',
+              { type: 'button', className: css.more, disabled: loading, onClick: () => load(false) },
+              t('auditLoadMore'),
+            )
+          : null,
+        !hasMore && entries.length > 0 ? h('p', { className: css.end }, t('auditPageEnd')) : null,
+      ),
+      selected === null
+        ? null
+        : h(
+            'aside',
+            { className: css.details, 'aria-label': t('auditDetails') },
+            h(
+              'div',
+              { className: css.detailsHeader },
+              h(
+                'div',
+                { className: css.detailsTitle },
+                h(Tag, { tone: entryTone(selected) }, categoryLabel(t, selected.category)),
+                h('span', { className: css.detailsLocation }, `#${String(selected.seq)}`),
+                h(
+                  Button,
+                  {
+                    variant: 'ghost',
+                    onClick: () => {
+                      void copySelected()
+                    },
+                  },
+                  t(copyState === 'copied' ? 'auditCopied' : 'auditCopy'),
+                ),
+                copyState === 'failed' ? h('span', { role: 'status' }, t('auditCopyFailed')) : null,
+              ),
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: css.close,
+                  'aria-label': t('auditClose'),
+                  onClick: () => setSelectedSeq(null),
+                },
+                h(IconCloseOutlineMedium, { size: 14 }),
+              ),
+            ),
+            h(
+              'div',
+              { key: selected.seq, className: css.detailsBody, 'data-audit-detail-scroll': true },
+              h('p', { className: css.detailsSummary }, auditSummaryOf(t, selected)),
+              selected.severity !== 'info'
+                ? h('p', { className: css.detailsSummary }, auditRecordedCause(selected) ?? t('auditNoCause'))
+                : null,
+              selected.status === 'exit-unverified'
+                ? h('p', { className: css.detailsSummary }, t('auditLegacyExitExplanation'))
+                : null,
+              selected.summaryCode === 'replay.not-compared'
+                ? h('p', { className: css.detailsSummary }, t('auditReplayExplanation'))
+                : null,
+              h(
+                'dl',
+                { className: css.overview },
+                h('div', null, h('dt', null, t('auditTime')), h('dd', null, timeOf(selected.time))),
+                h('div', null, h('dt', null, t('auditSequence')), h('dd', null, String(selected.seq))),
+              ),
+              selected.detail === null
+                ? h('p', { className: css.noDetails }, t('auditNoDetails'))
+                : (() => {
+                    const detail = auditDetailOf(selected.detail)
+                    return detail.kind === 'json'
+                      ? h(JsonTree, {
+                          data: detail.value,
+                          label: t('auditDetailJson'),
+                          className: css.jsonPayload,
+                          labels: acpJsonTreeLabels(t),
+                          ...(jsonStringWrapping === undefined
+                            ? {}
+                            : {
+                                stringWrapping: {
+                                  ...jsonStringWrapping,
+                                  label: t('auditWrapLines'),
+                                },
+                              }),
+                          expandTopLevel: true,
+                        })
+                      : h('pre', { className: css.detailPayload }, detail.value)
+                  })(),
+            ),
+          ),
+    ),
+    exportState === 'loading'
+      ? h('p', { role: 'status' }, t('auditExportLoading'))
+      : exportState === 'failed'
+        ? h(
+            'p',
+            { role: 'alert', className: css.error },
+            t(exportError === 'session-changed' ? 'auditExportSessionChanged' : 'auditExportFailed'),
+          )
+        : exportState === 'downloaded' && supportExport !== null
+          ? h(
+              'div',
+              { 'data-support-export-summary': true },
+              h('p', { role: 'status' }, t('auditExportComplete')),
+              h('p', null, t('auditExportPrivacy')),
+              h(
+                'p',
+                null,
+                t('auditExportCounts', {
+                  audit: supportExport.audit.rows.length,
+                  activity: supportExport.activity.rows.length,
+                }),
+              ),
+              h('p', null, t('auditExportScopeNote')),
+            )
+          : null,
+  )
+}
+
+export function createAcpAuditView(
+  remote: AcpRemoteLike,
+  jsonStringWrapping?: AcpJsonStringWrapping,
+): (props: AcpAuditViewProps) => ReactNode {
+  return (props) =>
+    h(AcpAuditView, { ...props, remote, ...(jsonStringWrapping === undefined ? {} : { jsonStringWrapping }) })
+}

@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "strict": true,
+    "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": "lib/tsconfig.typecheck.tsbuildinfo",
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "types": [
+      "node"
+    ],
+    "allowJs": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx"
+  ]
+}

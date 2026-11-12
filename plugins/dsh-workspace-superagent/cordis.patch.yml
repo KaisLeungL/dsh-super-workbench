@@ -1,0 +1,33 @@
+# 安装该 bundle 时仅增加主理入口，不替换宿主插件。
+- insert:
+    - id: workspace-superagent
+      name: '@local/dsh-workspace-superagent'
+    - id: preset-workspace-superagent-router
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: workspace-superagent-router
+        name: 超级大肥鱼
+        description: 默认关闭输入与工具，等待当前受信安装。
+        plugins:
+          - id: workspace-superagent-router-outer
+            name: '@local/dsh-workspace-superagent/preset'
+    - id: preset-workspace-superagent-scheduled
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: workspace-superagent-scheduled
+        name: 大肥鱼定时会话
+        description: 仅接收已确认的定时指令，不授予工具权限。
+        plugins:
+          - id: workspace-superagent-schedule-only
+            name: '@local/dsh-workspace-superagent/preset'
+            config:
+              scheduleOnly: true
+    - id: preset-workspace-superagent-worker
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: workspace-superagent-worker
+        name: 大肥鱼执行 Worker
+        description: 只读执行当前看板卡片，不创建任务、不扩大权限。
+        plugins:
+          - id: workspace-superagent-worker-outer
+            name: '@local/dsh-workspace-superagent/preset'

@@ -1,0 +1,235 @@
+{
+  "version": 1,
+  "island": {
+    "file": "island.png",
+    "width": 1152,
+    "height": 768
+  },
+  "grid": {
+    "file": "grid-overlay.png",
+    "width": 1152,
+    "height": 768
+  },
+  "trees": [
+    {
+      "id": "broadleaf",
+      "name": "阔叶树",
+      "file": "tree-broadleaf.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.50681,
+        "y": 0.88517
+      }
+    },
+    {
+      "id": "conifer",
+      "name": "针叶树",
+      "file": "tree-conifer.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.48982,
+        "y": 0.89713
+      }
+    },
+    {
+      "id": "sakura",
+      "name": "樱花",
+      "file": "tree-sakura.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.506131,
+        "y": 0.886762
+      }
+    },
+    {
+      "id": "maple",
+      "name": "红枫",
+      "file": "tree-maple.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.496201,
+        "y": 0.882775
+      }
+    },
+    {
+      "id": "ginkgo",
+      "name": "银杏",
+      "file": "tree-ginkgo.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.500009,
+        "y": 0.88118
+      }
+    },
+    {
+      "id": "birch",
+      "name": "白桦",
+      "file": "tree-birch.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.497013,
+        "y": 0.927432
+      }
+    },
+    {
+      "id": "willow",
+      "name": "垂柳",
+      "file": "tree-willow.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.508957,
+        "y": 0.888357
+      }
+    },
+    {
+      "id": "redwood",
+      "name": "红杉",
+      "file": "tree-redwood.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.494997,
+        "y": 0.898724
+      }
+    },
+    {
+      "id": "cedar",
+      "name": "雪松",
+      "file": "tree-cedar.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.50847,
+        "y": 0.870016
+      }
+    },
+    {
+      "id": "cypress",
+      "name": "柏树",
+      "file": "tree-cypress.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.494857,
+        "y": 0.881978
+      }
+    },
+    {
+      "id": "baobab",
+      "name": "猴面包树",
+      "file": "tree-baobab.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.455586,
+        "y": 0.914673
+      }
+    },
+    {
+      "id": "palm",
+      "name": "椰子树",
+      "file": "tree-palm.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.473248,
+        "y": 0.913078
+      }
+    },
+    {
+      "id": "bamboo",
+      "name": "竹子",
+      "file": "tree-bamboo.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.489709,
+        "y": 0.88437
+      }
+    },
+    {
+      "id": "magnolia",
+      "name": "玉兰",
+      "file": "tree-magnolia.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.499906,
+        "y": 0.888357
+      }
+    },
+    {
+      "id": "jacaranda",
+      "name": "蓝花楹",
+      "file": "tree-jacaranda.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.502974,
+        "y": 0.886762
+      }
+    },
+    {
+      "id": "orange",
+      "name": "橘子树",
+      "file": "tree-orange.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.502642,
+        "y": 0.88756
+      }
+    },
+    {
+      "id": "apple",
+      "name": "苹果树",
+      "file": "tree-apple.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.505125,
+        "y": 0.88756
+      }
+    },
+    {
+      "id": "olive",
+      "name": "橄榄树",
+      "file": "tree-olive.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.50035,
+        "y": 0.891547
+      }
+    },
+    {
+      "id": "acacia",
+      "name": "金合欢",
+      "file": "tree-acacia.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.493104,
+        "y": 0.88118
+      }
+    },
+    {
+      "id": "dragonblood",
+      "name": "龙血树",
+      "file": "tree-dragonblood.png",
+      "width": 384,
+      "height": 384,
+      "rootAnchor": {
+        "x": 0.501651,
+        "y": 0.88756
+      }
+    }
+  ]
+}

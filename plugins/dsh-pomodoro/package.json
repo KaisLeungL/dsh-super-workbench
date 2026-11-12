@@ -1,0 +1,47 @@
+{
+  "name": "@local/dsh-pomodoro-clock",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A compact Pomodoro clock in the DSH sidebar with a floating timer and persistent focus sessions.",
+  "engines": {
+    "dsh": ">=0.2.2-rc.1 <0.3.0"
+  },
+  "exports": {
+    ".": "./host.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "host.js",
+    "index.js",
+    "client.js",
+    "timer.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "completion-notifier.js",
+    "build-client.mjs"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check host.js && node --check client.js && node --check timer.js && node --check completion-notifier.js",
+    "build": "node build-client.mjs"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "dsh-super-workbench",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "devDependencies": {
+    "lightningcss": "^1.32.0",
+    "tsdown": "0.22.2",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2"
+  }
+}

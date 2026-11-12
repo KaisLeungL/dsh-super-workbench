@@ -1,0 +1,158 @@
+import type { Context } from '@deepseek-ai/cordis'
+import { z } from 'zod'
+import type { AcpExecutionView } from '../../contract/external-subagent.ts'
+import type { Session, SessionEventMap } from '@deepseek-ai/dsh-session'
+import type { ProjectionDefinition, ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
+import type {} from '@deepseek-ai/dsh-permission-presets'
+import type {} from '@deepseek-ai/dsh-agent'
+import { modelSelectionProjectionDefinition } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-tool-todo'
+import type {} from '@deepseek-ai/dsh-working-directory'
+import {
+  applySessionFact,
+  initialSessionFacts,
+  sessionFactsSchema,
+  type SessionFacts,
+  type SessionLike,
+} from '../../domain/session/session-facts.ts'
+import { currentModelContextSnapshots } from '../../domain/session/model-context-snapshots.ts'
+
+declare module '@deepseek-ai/dsh-session-projection' {
+  interface SessionProjectionStateMap {
+    acpExecution: SessionFacts
+  }
+}
+
+const externalRecordView: AcpExecutionView = { externalSubagent: true }
+const ordinarySessionView: AcpExecutionView = { externalSubagent: false }
+
+export const acpExecutionProjection = {
+  key: 'acpExecution',
+  stateVersion: 2,
+  stateSchema: sessionFactsSchema,
+  init: (_header, inheritedEventCount) => initialSessionFacts(inheritedEventCount),
+  apply: applySessionFact,
+  wire: {
+    viewSchema: z.object({ externalSubagent: z.boolean() }),
+    view: (state) => (state.externalSubagent ? externalRecordView : ordinarySessionView),
+  },
+} satisfies ProjectionDefinition<'acpExecution', SessionFacts>
+
+/** Validate the legacy raw read while native domains migrate to retained handles. */
+export function readNativeModelSelection(ctx: Context, session: Session) {
+  const registry = ctx.get('sessionProjections', false) ?? ctx.sessionProjections
+  const state = registry?.stateOf(session, 'modelSelection')
+  return state === undefined ? undefined : modelSelectionProjectionDefinition.stateSchema.parse(state)
+}
+
+const executionReader = Symbol('acp-execution-reader')
+type ExecutionContext = Context & { [executionReader]?: ProjectionHandle<SessionFacts> }
+
+/** Keep the owning reader available while accepted work drains after registration release. */
+export function bindExecutionProjection(ctx: Context, handle: ProjectionHandle<SessionFacts>): () => void {
+  Object.defineProperty(ctx, executionReader, { value: handle, configurable: true })
+  return () => { delete (ctx as ExecutionContext)[executionReader] }
+}
+
+export function readSessionFacts(ctx: Context, session: Session): SessionFacts {
+  const reader = (ctx as ExecutionContext)[executionReader]
+  if (reader !== undefined) return reader.stateOf(session)
+  const state = ctx.sessionProjections.stateOf(session, 'acpExecution')
+  if (state === undefined) throw new Error('ACP execution projection is unavailable')
+  return sessionFactsSchema.parse(state)
+}
+
+/** Accessors always read the host's current cut, including after a policy append. */
+export function acpSessionView(ctx: Context, session: Session | undefined): SessionLike | undefined {
+  if (session === undefined) return undefined
+  return {
+    identity: session,
+    header: session.header,
+    inheritedEventCount: session.inheritedEventCount,
+    get workingDirectory() {
+      return ctx.get('workingDirectory')?.get(session)
+    },
+    get seq() {
+      return session.seq
+    },
+    get facts() {
+      return readSessionFacts(ctx, session)
+    },
+    captureRemoteCancelledTurn: (scope) => {
+      const registry = ctx.get('agents', false)
+      const owner = registry?.get(session.id)
+      const matchesScope = () => {
+        const facts = readSessionFacts(ctx, session)
+        return (
+          facts.turnOpen &&
+          facts.openSteps.some(
+            (step) => step.turn === scope.turn && step.step === scope.step && step.startSeq === scope.startSeq,
+          )
+        )
+      }
+      if (owner?.session !== session || owner.status !== 'running' || !matchesScope()) return undefined
+      return () => {
+        const current = ctx.get('agents', false)?.get(session.id)
+        if (current !== owner || current.session !== session || current.status !== 'running' || !matchesScope())
+          return false
+        current.cancel({ kind: 'hook', reason: 'acp-remote-cancelled' }, { keepInbox: true })
+        return true
+      }
+    },
+    currentModelContextSnapshots: () => {
+      const agent = ctx.get('agents', false)?.get(session.id)
+      const tools = ctx.get('tools', false)
+      const skillEntryPointAvailable =
+        agent !== undefined && tools?.schemas(agent).some((schema) => schema.name === 'skill') === true
+      return currentModelContextSnapshots(session.deriveMessages(), skillEntryPointAvailable)
+    },
+    get permissions() {
+      const state = ctx.sessionProjections.stateOf(session, 'permissions')
+      if (state === undefined) throw new Error('DSH permission projection is unavailable')
+      return z.object({ sandbox: z.string().nullable(), approval: z.string().nullable() }).parse(state)
+    },
+    append: (type, data) => session.append(type as keyof SessionEventMap, data as never),
+    watchTurnEnd: (listener) =>
+      ctx.on('session/event', (owner, event) => {
+        if (owner.id === session.id && event.type === 'turn/end') listener()
+      }),
+    watchWorkingDirectory: (listener) =>
+      ctx.on('session/event', (owner, event) => {
+        if (owner === session && event.type === 'working-directory/change') listener(event.data.cwd)
+      }),
+    watchRouteChange: (provider, listener) =>
+      ctx.on('agent/request', async ({ agent }, next) => {
+        const config = await next()
+        if (agent.id === session.id && config.provider !== provider) await listener()
+        return config
+      }),
+    watchSteering: (listener) => {
+      let disposed = false
+      const check = (): void => {
+        if (disposed) return
+        const agent = ctx.get('agents')?.get(session.id)
+        if (
+          agent?.inbox.nextStep.some(
+            (message) => message.source.kind === 'user' || message.source.kind === 'user-question-reply',
+          )
+        )
+          listener()
+      }
+      // Re-read after the mutation's synchronous listeners have run: an edit or
+      // removal in the same task must not interrupt an otherwise valid prompt.
+      const off = ctx.on('agent/inbox/inserted', ({ agent }) => {
+        if (agent.id === session.id) queueMicrotask(check)
+      })
+      queueMicrotask(check)
+      return () => {
+        disposed = true
+        off()
+      }
+    },
+    publishPlan: (todos) => {
+      // tool-todo is optional. Its projection owns current plan state and the native dock.
+      if (ctx.sessionProjections.stateOf(session, 'todos') === undefined) return
+      session.append('todo/write', { todos: [...todos] })
+    },
+  }
+}

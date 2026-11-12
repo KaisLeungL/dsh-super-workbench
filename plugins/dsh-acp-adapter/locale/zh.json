@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Agent Provider",
+    "description": "管理 Codex、Claude 等 Agent 的独立会话与团队协作。"
+  }
+}

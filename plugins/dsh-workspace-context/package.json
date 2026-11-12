@@ -1,0 +1,13 @@
+{
+  "name": "@local/dsh-workspace-context",
+  "version": "0.1.1",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.js" },
+    "./task-board": "./task-board.js",
+    "./schedule": "./schedule.js"
+  },
+  "files": ["index.js", "index.d.ts", "task-board.js", "schedule.js", "cordis.patch.yml", "README.md"],
+  "scripts": { "test": "node --test test/*.test.js" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "title": "工作区主理 Agent",
+    "description": "工作区主理运行状态、原生会话与暂停恢复控制；B04只读版本默认暂停，派工和外部渠道尚未接入。"
+  },
+  "ui": {
+    "title": "超级大肥鱼",
+    "eyebrow": "工作区",
+    "heading": "主理运行环境待就绪",
+    "description": "请核对可信宿主装配与运行依赖。B04版本仅提供受限只读会话和运行控制，尚不支持任务派工、日报与外部渠道。",
+    "dependencies": "运行依赖",
+    "board": "共享任务看板",
+    "admission": "原生输入准入",
+    "available": "已检测到",
+    "missing": "不可用",
+    "loading": "正在检查运行依赖…",
+    "unreachable": "无法读取宿主状态。请检查插件是否启用。",
+    "boundary": "任务继续使用现有看板；当前入口不会创建替代账本。",
+    "settingsIntro": "设置主理会话使用的 DSH 模型与推理强度。",
+    "settingsModel": "模型",
+    "settingsEffort": "推理强度",
+    "settingsMode": "模式",
+    "settingsStandard": "标准模式（只读工具）",
+    "settingsSelectModel": "选择模型",
+    "settingsDefaultEffort": "模型默认",
+    "settingsEffort.off": "关闭",
+    "settingsEffort.low": "低",
+    "settingsEffort.medium": "中",
+    "settingsEffort.high": "高",
+    "settingsEffort.max": "最高",
+    "settingsSave": "保存",
+    "settingsSaved": "已保存",
+    "settingsLoading": "正在读取主理设置…",
+    "settingsCatalogError": "暂时无法加载 DSH 模型列表。",
+    "settingsUnavailable": "主理会话暂不可用，请检查连接与授权。"
+  }
+}

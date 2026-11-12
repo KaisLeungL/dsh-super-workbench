@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Managed input admission",
+    "description": "Checks current authorization before claiming input and dispatching model requests; rejected pending input is retained."
+  }
+}

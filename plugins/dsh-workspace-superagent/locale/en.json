@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "title": "Workspace Steward Agent",
+    "description": "Native steward session health and lifecycle controls. B04 starts paused with read-only board access; dispatch and external channels are not connected."
+  },
+  "ui": {
+    "title": "超级大肥鱼",
+    "eyebrow": "Workspace",
+    "heading": "Steward runtime needs attention",
+    "description": "Check the trusted host assembly and dependencies. B04 provides a limited read-only session and lifecycle controls. Dispatch, briefings and external channels are not connected.",
+    "dependencies": "Runtime dependencies",
+    "board": "Shared task board",
+    "admission": "Native input admission",
+    "available": "Detected",
+    "missing": "Unavailable",
+    "loading": "Checking runtime dependencies…",
+    "unreachable": "The host status could not be read. Check whether the plugin is enabled.",
+    "boundary": "Tasks continue to use the existing board. This entry does not create a replacement ledger.",
+    "settingsIntro": "Choose the DSH model and reasoning effort for the steward chat.",
+    "settingsModel": "Model",
+    "settingsEffort": "Reasoning effort",
+    "settingsMode": "Mode",
+    "settingsStandard": "Standard (read-only tools)",
+    "settingsSelectModel": "Select a model",
+    "settingsDefaultEffort": "Model default",
+    "settingsEffort.off": "Off",
+    "settingsEffort.low": "Low",
+    "settingsEffort.medium": "Medium",
+    "settingsEffort.high": "High",
+    "settingsEffort.max": "Max",
+    "settingsSave": "Save",
+    "settingsSaved": "Saved",
+    "settingsLoading": "Loading steward settings…",
+    "settingsCatalogError": "Could not load the DSH model list.",
+    "settingsUnavailable": "The steward chat is unavailable. Check the connection and authorization."
+  }
+}

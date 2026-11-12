@@ -1,0 +1,94 @@
+/**
+ * Local styles of the task-board settings card.
+ *
+ * The card's chrome belongs to the shared family slice
+ * (`settings-card.module.css`, generated); this file owns only the nested
+ * disclosure list and the acceptance block's quiet notes, on theme tokens
+ * instead of inline literals.
+ */
+
+.note {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.error {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.resolvedList {
+  margin: 4px 0 8px;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* One spacing step for this card's own blocks: the topic list and the power
+   facts under it read the same value instead of each hard-coding one. */
+.nestedCards,
+.power {
+  --task-board-settings-gap: 8px;
+}
+
+/* Live power facts plus the battery caveat, below the topic cards: quiet
+   small print that follows the disclosures instead of competing with them. */
+.power {
+  display: flex;
+  flex-direction: column;
+  gap: var(--task-board-settings-gap);
+  margin-top: calc(var(--task-board-settings-gap) * 2);
+}
+
+/* The facts themselves: a two-column label/value grid whose labels form one
+   quiet column, so the four values start on one left edge. */
+.powerFacts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: calc(var(--task-board-settings-gap) * 2);
+  row-gap: 2px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.powerTerm,
+.powerValue {
+  margin: 0;
+}
+
+.powerTerm {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* The battery caveat: secondary ink at the small size the 12-13px roles use,
+   so it does not compete with the topic cards above it. */
+.powerLine {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.powerError {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* The nested disclosure cards of this card: the board and its runtime
+   behavior, goal acceptance, and the sections a provider extension
+   contributes. The gap keeps the stacked card
+   borders apart; an empty list draws nothing. */
+.nestedCards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--task-board-settings-gap);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}

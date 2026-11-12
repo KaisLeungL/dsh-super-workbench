@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Agent Provider",
+    "description": "Add and manage agents available from the DSH session UI through ACP."
+  }
+}

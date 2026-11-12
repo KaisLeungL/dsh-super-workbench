@@ -1,0 +1,3 @@
+- insert:
+    - id: local-pomodoro-clock
+      name: '@local/dsh-pomodoro-clock'
